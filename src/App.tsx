@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ShoppingBag,
   Search,
@@ -7,16 +7,34 @@ import {
   Check,
   SlidersHorizontal,
 } from 'lucide-react';
+import { onAuthStateChanged, type User } from 'firebase/auth';
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  onSnapshot,
+  serverTimestamp,
+  query,
+  where,
+} from 'firebase/firestore';
+import {
+  db,
+  auth,
+  googleProvider,
+  signInWithPopup,
+  signOut,
+  OperationType,
+  handleFirestoreError,
+} from './firebase';
 import {
   filterAndSortOutfits,
   calculateCartSummary,
   type OutfitCategory,
   type OutfitProduct,
-  type OutfitPiece,
   type GarmentSize,
   type CartItem,
   type OrderRecord,
-  type CapsulePieceOption,
 } from './utils/commerceLogic';
 import {
   HERO_CAMPAIGN_IMAGE,
@@ -30,21 +48,51 @@ import { CartCheckoutDrawer } from './components/CartCheckoutDrawer';
 import { BoutiqueSellerModal } from './components/BoutiqueSellerModal';
 
 const CATEGORIES: OutfitCategory[] = [
-  'All Outfits',
-  'Tailored Workwear',
-  'Evening & Silk',
-  'Outerwear Sets',
-  'Resort Linen',
+  'All Kurtis',
+  'Pookie Pastel Edition',
+  'Daily Cotton Kurti',
+  '2-Piece Kurti Set',
+  'Festive 3-Piece',
 ];
 
+const LOCAL_ORDERS_STORAGE_KEY = 'jaybor_bd_orders_v1';
+const LOCAL_OUTFITS_STORAGE_KEY = 'jaybor_bd_outfits_v1';
+
 export default function App() {
-  // Catalog & Business State
-  const [outfits, setOutfits] = useState<OutfitProduct[]>(INITIAL_OUTFITS);
-  const [orders, setOrders] = useState<OrderRecord[]>(INITIAL_ORDERS);
+  // Auth & Database State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  // Catalog & Customer Orders State (Backed by Firestore + Local Cache so every device is fast & smooth)
+  const [outfits, setOutfits] = useState<OutfitProduct[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_OUTFITS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return INITIAL_OUTFITS;
+  });
+
+  const [orders, setOrders] = useState<OrderRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_ORDERS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return INITIAL_ORDERS;
+  });
 
   // Filter & Sort State
   const [selectedCategory, setSelectedCategory] =
-    useState<OutfitCategory>('All Outfits');
+    useState<OutfitCategory>('All Kurtis');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<
     'featured' | 'price-asc' | 'price-desc' | 'savings-desc'
@@ -57,25 +105,187 @@ export default function App() {
   const [selectedOutfitForPdp, setSelectedOutfitForPdp] =
     useState<OutfitProduct | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [cartInitialStep, setCartInitialStep] = useState<'bag' | 'checkout'>(
+    'bag'
+  );
   const [isSellerModalOpen, setIsSellerModalOpen] = useState(false);
-  const [atelierTab, setAtelierTab] = useState<'styler' | 'sizing'>('styler');
+  const [utilityTab, setUtilityTab] = useState<'sizing' | 'tracker'>('sizing');
   const [quickAddedId, setQuickAddedId] = useState<string | null>(null);
 
-  // Shopping Bag State (Seeded with 1 signature outfit so bag is immediately inspectable or modifiable)
+  // Shopping Bag State (Seeded with 1 signature Pookie Kurti Set)
   const [cartItems, setCartItems] = useState<CartItem[]>([
     {
-      cartItemId: `${INITIAL_OUTFITS[0].id}-Complete Outfit Set-complete-S-${INITIAL_OUTFITS[0].colorways[0].name}`,
+      cartItemId: `${INITIAL_OUTFITS[0].id}-M (38")-${INITIAL_OUTFITS[0].colorways[0].name}`,
       outfitId: INITIAL_OUTFITS[0].id,
       title: INITIAL_OUTFITS[0].title,
-      purchaseType: 'Complete Outfit Set',
-      size: 'S',
+      category: INITIAL_OUTFITS[0].category,
+      size: 'M (38")',
       colorway: INITIAL_OUTFITS[0].colorways[0].name,
-      unitPrice: INITIAL_OUTFITS[0].completePrice,
-      originalUnitPrice: INITIAL_OUTFITS[0].individualTotal,
+      unitPriceBdt: INITIAL_OUTFITS[0].priceBdt,
+      originalUnitPriceBdt: INITIAL_OUTFITS[0].originalPriceBdt,
       quantity: 1,
       imageUrl: INITIAL_OUTFITS[0].imageUrl,
     },
   ]);
+
+  // Listen to Firebase Auth state
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setAuthReady(true);
+    });
+    return () => unsub();
+  }, []);
+
+  // Subscribe to public published outfits in Firestore
+  useEffect(() => {
+    if (!authReady) return;
+    const outfitsPath = 'outfits';
+    const q = query(
+      collection(db, outfitsPath),
+      where('isPublished', '==', true)
+    );
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteOutfits: OutfitProduct[] = snapshot.docs.map((docSnap) => {
+            const d = docSnap.data();
+            return {
+              id: docSnap.id,
+              title: d.title,
+              subtitle: d.subtitle,
+              category: d.category,
+              occasion: 'Everyday & Festive Bangladesh Wear',
+              priceBdt: d.priceBdt,
+              originalPriceBdt: d.originalPriceBdt,
+              pieces: [
+                {
+                  id: `${docSnap.id}-p1`,
+                  name: d.title,
+                  role: 'Kurti Top',
+                  priceBdt: d.priceBdt,
+                  fabric: d.fabric,
+                },
+              ],
+              colorName: d.colorName,
+              colorHex: d.colorHex,
+              colorways: [{ name: d.colorName, hex: d.colorHex }],
+              sizes: d.sizes || [
+                'S (36")',
+                'M (38")',
+                'L (40")',
+                'XL (42")',
+                'XXL (44")',
+              ],
+              stockCount: d.stockCount,
+              statusTag: d.statusTag,
+              imageUrl: d.imageUrl,
+              fabric: d.fabric,
+              lengthInches: 'Kurti 42" · Trouser 38"',
+              careInstructions: 'Cold hand wash recommended.',
+              featured: true,
+              isPublished: d.isPublished,
+            };
+          });
+
+          setOutfits((prev) => {
+            const existingIds = new Set(remoteOutfits.map((r) => r.id));
+            const merged = [
+              ...remoteOutfits,
+              ...prev.filter((p) => !existingIds.has(p.id)),
+            ];
+            try {
+              localStorage.setItem(
+                LOCAL_OUTFITS_STORAGE_KEY,
+                JSON.stringify(merged)
+              );
+            } catch {
+              // ignore
+            }
+            return merged;
+          });
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, outfitsPath);
+      }
+    );
+
+    return () => unsub();
+  }, [authReady]);
+
+  // Subscribe to customer orders in Firestore when authenticated
+  useEffect(() => {
+    if (!authReady || !currentUser || !currentUser.emailVerified) return;
+    const ordersPath = 'orders';
+    const isAdminUser = currentUser.email === 'shihabahmmed700@gmail.com';
+    const ordersQuery = isAdminUser
+      ? collection(db, ordersPath)
+      : query(
+          collection(db, ordersPath),
+          where('customerUid', '==', currentUser.uid)
+        );
+
+    const unsub = onSnapshot(
+      ordersQuery,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteOrders: OrderRecord[] = snapshot.docs.map((docSnap) => {
+            const d = docSnap.data();
+            return {
+              id: docSnap.id,
+              orderNumber: d.orderNumber,
+              createdAt: 'Synced in Jaybor Cloud DB',
+              customerUid: d.customerUid,
+              customerName: d.customerName,
+              phone: d.phone,
+              district: d.district,
+              address: d.address,
+              deliveryZone: d.deliveryZone,
+              paymentMethod: 'Cash on Delivery',
+              primaryOutfitTitle: d.primaryOutfitTitle,
+              primaryOutfitImage: d.primaryOutfitImage,
+              itemSummaryList: d.itemSummaryList || [],
+              items: [],
+              totalQuantity: d.totalQuantity,
+              subtotalBdt: d.subtotalBdt,
+              savingsBdt: 0,
+              discountBdt: d.discountBdt,
+              deliveryFeeBdt: d.deliveryFeeBdt,
+              totalBdt: d.totalBdt,
+              promoCodeApplied: null,
+              status: d.status,
+            };
+          });
+
+          setOrders((prev) => {
+            const remoteNumbers = new Set(
+              remoteOrders.map((r) => r.orderNumber)
+            );
+            const merged = [
+              ...remoteOrders,
+              ...prev.filter((p) => !remoteNumbers.has(p.orderNumber)),
+            ];
+            try {
+              localStorage.setItem(
+                LOCAL_ORDERS_STORAGE_KEY,
+                JSON.stringify(merged)
+              );
+            } catch {
+              // ignore
+            }
+            return merged;
+          });
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, ordersPath);
+      }
+    );
+
+    return () => unsub();
+  }, [authReady, currentUser]);
 
   const filteredOutfits = useMemo(
     () =>
@@ -84,30 +294,34 @@ export default function App() {
   );
 
   const cartSummary = useMemo(
-    () => calculateCartSummary(cartItems, ''),
+    () => calculateCartSummary(cartItems, '', 'Inside Dhaka'),
     [cartItems]
   );
 
-  // Handlers
-  const handleAddToCartFromPdp = (payload: {
+  // Auth Handlers
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      console.error('Google Sign-In cancelled or failed:', err);
+    }
+  };
+
+  const handleGoogleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error('Sign-out error:', err);
+    }
+  };
+
+  // Cart & Order Handlers
+  const handleAddToCart = (payload: {
     outfit: OutfitProduct;
-    purchaseType: 'Complete Outfit Set' | 'Individual Piece';
-    selectedPiece?: OutfitPiece;
     size: GarmentSize;
     colorway: string;
   }) => {
-    const unitPrice =
-      payload.purchaseType === 'Complete Outfit Set'
-        ? payload.outfit.completePrice
-        : payload.selectedPiece?.price || payload.outfit.completePrice;
-
-    const originalUnitPrice =
-      payload.purchaseType === 'Complete Outfit Set'
-        ? payload.outfit.individualTotal
-        : unitPrice;
-
-    const pieceKey = payload.selectedPiece?.id || 'complete';
-    const cartItemId = `${payload.outfit.id}-${payload.purchaseType}-${pieceKey}-${payload.size}-${payload.colorway}`;
+    const cartItemId = `${payload.outfit.id}-${payload.size}-${payload.colorway}`;
 
     setCartItems((prev) => {
       const existing = prev.find((item) => item.cartItemId === cartItemId);
@@ -124,12 +338,11 @@ export default function App() {
           cartItemId,
           outfitId: payload.outfit.id,
           title: payload.outfit.title,
-          purchaseType: payload.purchaseType,
-          pieceName: payload.selectedPiece?.name,
+          category: payload.outfit.category,
           size: payload.size,
           colorway: payload.colorway,
-          unitPrice,
-          originalUnitPrice,
+          unitPriceBdt: payload.outfit.priceBdt,
+          originalUnitPriceBdt: payload.outfit.originalPriceBdt,
           quantity: 1,
           imageUrl: payload.outfit.imageUrl,
         },
@@ -137,53 +350,25 @@ export default function App() {
     });
   };
 
-  const handleQuickAddCompleteSet = (outfit: OutfitProduct) => {
-    handleAddToCartFromPdp({
+  const handleOrderNowCodFromPdp = (payload: {
+    outfit: OutfitProduct;
+    size: GarmentSize;
+    colorway: string;
+  }) => {
+    handleAddToCart(payload);
+    setSelectedOutfitForPdp(null);
+    setCartInitialStep('checkout');
+    setIsCartOpen(true);
+  };
+
+  const handleQuickAddKurti = (outfit: OutfitProduct) => {
+    handleAddToCart({
       outfit,
-      purchaseType: 'Complete Outfit Set',
-      size: 'S',
-      colorway: outfit.colorways[0]?.name || 'Signature',
+      size: 'M (38")',
+      colorway: outfit.colorways[0]?.name || outfit.colorName,
     });
     setQuickAddedId(outfit.id);
     setTimeout(() => setQuickAddedId(null), 1200);
-  };
-
-  const handleAddCustomCapsule = (payload: {
-    top: CapsulePieceOption;
-    bottom: CapsulePieceOption;
-    outerwear: CapsulePieceOption;
-    size: GarmentSize;
-    bundlePrice: number;
-    individualSum: number;
-  }) => {
-    const cartItemId = `capsule-${payload.top.id}-${payload.bottom.id}-${payload.outerwear.id}-${payload.size}`;
-    const pieceSummary = `${payload.outerwear.name} + ${payload.top.name} + ${payload.bottom.name}`;
-
-    setCartItems((prev) => {
-      const existing = prev.find((i) => i.cartItemId === cartItemId);
-      if (existing) {
-        return prev.map((i) =>
-          i.cartItemId === cartItemId ? { ...i, quantity: i.quantity + 1 } : i
-        );
-      }
-      return [
-        ...prev,
-        {
-          cartItemId,
-          outfitId: 'custom-capsule',
-          title: 'Bespoke 3-Piece Capsule Ensemble',
-          purchaseType: 'Custom Capsule Set',
-          pieceName: pieceSummary,
-          size: payload.size,
-          colorway: `${payload.outerwear.color.split(' ')[0]} / ${payload.top.color.split(' ')[0]}`,
-          unitPrice: payload.bundlePrice,
-          originalUnitPrice: payload.individualSum,
-          quantity: 1,
-          imageUrl: HERO_CAMPAIGN_IMAGE,
-        },
-      ];
-    });
-    setIsCartOpen(true);
   };
 
   const handleUpdateCartQuantity = (cartItemId: string, delta: number) => {
@@ -204,32 +389,146 @@ export default function App() {
     );
   };
 
-  const handleCompleteOrder = (newOrder: OrderRecord) => {
-    setOrders((prev) => [newOrder, ...prev]);
+  const handleCompleteOrder = async (newOrder: OrderRecord) => {
+    const updatedOrders = [newOrder, ...orders];
+    setOrders(updatedOrders);
+    try {
+      localStorage.setItem(
+        LOCAL_ORDERS_STORAGE_KEY,
+        JSON.stringify(updatedOrders)
+      );
+    } catch {
+      // ignore
+    }
+
+    // If user is authenticated & verified, also persist directly to Cloud Firestore /orders/{orderId}
+    if (currentUser && currentUser.emailVerified) {
+      const safeOrderId = newOrder.id.replace(/[^a-zA-Z0-9_-]/g, '-');
+      const path = `orders/${safeOrderId}`;
+      try {
+        await setDoc(doc(db, 'orders', safeOrderId), {
+          orderNumber: newOrder.orderNumber.slice(0, 32),
+          customerUid: currentUser.uid,
+          customerName: newOrder.customerName.slice(0, 100),
+          phone: newOrder.phone.slice(0, 14),
+          district: newOrder.district.slice(0, 80),
+          address: newOrder.address.slice(0, 300),
+          deliveryZone: newOrder.deliveryZone,
+          paymentMethod: 'Cash on Delivery',
+          primaryOutfitTitle: newOrder.primaryOutfitTitle.slice(0, 300),
+          primaryOutfitImage: newOrder.primaryOutfitImage.slice(0, 500),
+          itemSummaryList: newOrder.itemSummaryList.slice(0, 10),
+          totalQuantity: Math.min(100, Math.max(1, newOrder.totalQuantity)),
+          subtotalBdt: newOrder.subtotalBdt,
+          deliveryFeeBdt: newOrder.deliveryFeeBdt,
+          discountBdt: newOrder.discountBdt,
+          totalBdt: newOrder.totalBdt,
+          status: 'Pending Call Verification',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, path);
+      }
+    }
+
     setCartItems([]);
   };
 
-  const handleAddNewOutfitListing = (newOutfit: OutfitProduct) => {
-    setOutfits((prev) => [newOutfit, ...prev]);
+  const handleAddNewOutfitListing = async (newOutfit: OutfitProduct) => {
+    const updated = [newOutfit, ...outfits];
+    setOutfits(updated);
+    try {
+      localStorage.setItem(LOCAL_OUTFITS_STORAGE_KEY, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+
+    if (
+      currentUser &&
+      currentUser.emailVerified &&
+      currentUser.email === 'shihabahmmed700@gmail.com'
+    ) {
+      const safeId = newOutfit.id.replace(/[^a-zA-Z0-9_-]/g, '-');
+      const path = `outfits/${safeId}`;
+      try {
+        await setDoc(doc(db, 'outfits', safeId), {
+          title: newOutfit.title.slice(0, 120),
+          subtitle: newOutfit.subtitle.slice(0, 240),
+          category: newOutfit.category,
+          priceBdt: newOutfit.priceBdt,
+          originalPriceBdt: newOutfit.originalPriceBdt,
+          fabric: newOutfit.fabric.slice(0, 120),
+          colorName: newOutfit.colorName.slice(0, 60),
+          colorHex: newOutfit.colorHex,
+          imageUrl: newOutfit.imageUrl.slice(0, 500),
+          stockCount: newOutfit.stockCount,
+          statusTag: newOutfit.statusTag,
+          sizes: newOutfit.sizes.slice(0, 6),
+          isPublished: true,
+          authorUid: currentUser.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, path);
+      }
+    }
   };
 
-  const handleUpdateOrderStatus = (
+  const handleUpdateOrderStatus = async (
     orderId: string,
     status: OrderRecord['status']
   ) => {
-    setOrders((prev) =>
-      prev.map((ord) => (ord.orderId === orderId ? { ...ord, status } : ord))
+    const updated = orders.map((ord) =>
+      ord.id === orderId ? { ...ord, status } : ord
     );
+    setOrders(updated);
+    try {
+      localStorage.setItem(LOCAL_ORDERS_STORAGE_KEY, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+
+    if (
+      currentUser &&
+      currentUser.emailVerified &&
+      currentUser.email === 'shihabahmmed700@gmail.com' &&
+      !orderId.startsWith('seed-')
+    ) {
+      const safeId = orderId.replace(/[^a-zA-Z0-9_-]/g, '-');
+      const targetOrder = orders.find((o) => o.id === orderId);
+      if (targetOrder) {
+        const path = `orders/${safeId}`;
+        try {
+          await updateDoc(doc(db, 'orders', safeId), {
+            status,
+            address: targetOrder.address,
+            district: targetOrder.district,
+            updatedAt: serverTimestamp(),
+          });
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, path);
+        }
+      }
+    }
   };
 
-  const handleRestockOutfit = (outfitId: string, additionalUnits: number) => {
-    setOutfits((prev) =>
-      prev.map((o) =>
-        o.id === outfitId
-          ? { ...o, stockCount: o.stockCount + additionalUnits }
-          : o
-      )
+  const handleRestockOutfit = async (
+    outfitId: string,
+    additionalUnits: number
+  ) => {
+    const updated = outfits.map((o) =>
+      o.id === outfitId
+        ? { ...o, stockCount: o.stockCount + additionalUnits }
+        : o
     );
+    setOutfits(updated);
+    try {
+      localStorage.setItem(LOCAL_OUTFITS_STORAGE_KEY, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
   };
 
   const scrollToSection = (id: string) => {
@@ -240,23 +539,22 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#FAF8F5] text-[#181615]">
+    <div className="min-h-screen flex flex-col bg-[#FFF9FB] text-[#2A1621]">
       {/* Slim Dismissible Promotional Surface (<= 40px height, 15% mobile sticky cap respected) */}
       {showPromoBanner && (
-        <div className="h-9 bg-[#181615] text-[#FAF8F5] px-4 sm:px-8 flex items-center justify-between text-xs">
+        <div className="h-9 bg-[#A83264] text-white px-4 sm:px-8 flex items-center justify-between text-xs">
           <div className="truncate">
             <span>
-              Autumn / Winter Atelier Collection · Save 12% on Complete Styled
-              Outfits · Code{' '}
-              <strong className="font-mono-num">ATELIER15</strong> for 15%
-              Private Client Reduction
+              Jaybor Bangladesh · 100% Cash on Delivery (Inside Dhaka ৳70 ·
+              Outside Dhaka ৳130) · Use Code{' '}
+              <strong className="font-mono-num">JAYBOR10</strong> for 10% Off
             </span>
           </div>
           <button
             type="button"
             onClick={() => setShowPromoBanner(false)}
             aria-label="Dismiss announcement banner"
-            className="ml-4 text-[#D8CFC2] hover:text-white transition-colors shrink-0"
+            className="ml-4 text-[#FCEEF4] hover:text-white transition-colors shrink-0"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -264,47 +562,47 @@ export default function App() {
       )}
 
       {/* Top Bar Contract: Strictly 1 row, 3 zones separated by gap-8 */}
-      <header className="sticky top-0 z-30 bg-[#FAF8F5]/95 backdrop-blur-xs border-b border-[#E5E0D8]">
+      <header className="sticky top-0 z-30 bg-[#FFF9FB]/95 backdrop-blur-xs border-b border-[#EDD5E1]">
         <div className="max-w-[1280px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-8">
           {/* Zone 1: Single text element wordmark in display face */}
           <a
             href="#top"
-            className="font-display text-2xl font-semibold tracking-tight text-[#181615] whitespace-nowrap shrink-0"
+            className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-[#A83264] whitespace-nowrap shrink-0"
           >
-            Maison Valéria
+            Jaybor
           </a>
 
           {/* Zone 2: 4 concise single-line text navigation links */}
           <nav
             aria-label="Primary Navigation"
-            className="hidden md:flex items-center gap-7 text-xs font-medium uppercase tracking-wider text-[#57514A]"
+            className="hidden md:flex items-center gap-7 text-xs font-medium uppercase tracking-wider text-[#6E4B5E]"
           >
             <a
               href="#collection-grid"
-              className="hover:text-[#181615] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+              className="hover:text-[#A83264] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
             >
-              Outfits Collection
+              Kurti Collection
             </a>
             <a
-              href="#capsule-styler"
-              onClick={() => setAtelierTab('styler')}
-              className="hover:text-[#181615] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+              href="#size-and-tracker"
+              onClick={() => setUtilityTab('sizing')}
+              className="hover:text-[#A83264] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
             >
-              Capsule Styler
+              BD Size Guide
             </a>
             <a
-              href="#capsule-styler"
-              onClick={() => setAtelierTab('sizing')}
-              className="hover:text-[#181615] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+              href="#size-and-tracker"
+              onClick={() => setUtilityTab('tracker')}
+              className="hover:text-[#A83264] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
             >
-              Fit Calculator
+              Track Order
             </a>
             <button
               type="button"
               onClick={() => setIsSellerModalOpen(true)}
-              className="hover:text-[#181615] hover:underline underline-offset-4 transition-colors uppercase tracking-wider whitespace-nowrap shrink-0"
+              className="hover:text-[#A83264] hover:underline underline-offset-4 transition-colors uppercase tracking-wider whitespace-nowrap shrink-0"
             >
-              Boutique Desk
+              Seller Desk
             </button>
           </nav>
 
@@ -312,47 +610,50 @@ export default function App() {
           <div className="flex items-center shrink-0">
             <button
               type="button"
-              onClick={() => setIsCartOpen(true)}
+              onClick={() => {
+                setCartInitialStep('bag');
+                setIsCartOpen(true);
+              }}
               aria-label={`Open shopping bag with ${cartSummary.itemCount} items`}
-              className="px-4 py-2 text-xs font-medium bg-[#181615] text-[#FAF8F5] hover:bg-[#2E2A27] transition-colors flex items-center gap-2 whitespace-nowrap shrink-0"
+              className="px-4 py-2 text-xs font-medium bg-[#A83264] text-white rounded-lg hover:bg-[#8C2652] transition-colors flex items-center gap-2 whitespace-nowrap shrink-0"
             >
               <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Shopping Bag ({cartSummary.itemCount})</span>
+              <span>COD Bag ({cartSummary.itemCount})</span>
             </button>
           </div>
         </div>
       </header>
 
       <main id="top" className="flex-1">
-        {/* SECTION 1: Storefront Hero Split + Full-Width Provenance Strip */}
-        <section className="border-b border-[#E5E0D8]">
+        {/* SECTION 1: Storefront Hero Split + Full-Width BD Delivery & Trust Strip */}
+        <section className="border-b border-[#EDD5E1] bg-gradient-to-b from-[#FCEEF4]/60 to-[#FFF9FB]">
           <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-10 sm:py-14">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-stretch">
               {/* Left 6 Cols: Editorial Campaign Copy & Direct Route */}
-              <div className="lg:col-span-6 flex flex-col justify-between py-2 space-y-8">
-                <div className="space-y-5">
-                  <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-widest text-[#6E675F]">
-                    <span>01. Autumn / Winter 2026 Lookbook</span>
+              <div className="lg:col-span-6 flex flex-col justify-between py-2 space-y-7">
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-widest text-[#A83264] font-medium">
+                    <span>01. Jaybor Bangladesh Kurti Edition</span>
                     <span aria-hidden="true">·</span>
-                    <span>Milan & Paris Atelier</span>
+                    <span>Soft Pookie & Classic Heritage</span>
                   </div>
 
                   <h1
-                    className="font-display font-semibold text-[#181615] leading-[1.08] tracking-tight max-w-xl"
+                    className="font-display font-semibold text-[#2A1621] leading-[1.08] tracking-tight max-w-xl"
                     style={{
-                      fontSize: 'clamp(2.25rem, 4vw, 3.75rem)',
+                      fontSize: 'clamp(2.25rem, 4vw, 3.65rem)',
                       textWrap: 'balance',
                     }}
                   >
-                    Architectural Womenswear Styled as Complete Ensembles.
+                    Graceful Pastel & Berry Kurti Outfits for Every Occasion.
                   </h1>
 
-                  <p className="text-base text-[#4A443F] leading-relaxed max-w-[62ch]">
-                    Every Maison Valéria look is pattern-graded as a cohesive
-                    two- or three-piece female outfit—pairing Belgian flax
-                    suiting, 22-momme Como mulberry silk, and Super 130s virgin
-                    wool. Acquire the complete styled ensemble with a 12%
-                    atelier reduction or select individual garments.
+                  <p className="text-base text-[#5B2C44] leading-relaxed max-w-[60ch]">
+                    Designed in Dhaka for effortless everyday comfort and
+                    festive charm. Explore breathable chikankari cotton kurtis,
+                    2-piece handloom co-ords, and embroidered 3-piece muslin
+                    sets—delivered across all 64 districts of Bangladesh with
+                    100% Cash on Delivery.
                   </p>
                 </div>
 
@@ -361,115 +662,116 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => scrollToSection('collection-grid')}
-                      className="px-6 py-3.5 bg-[#181615] text-[#FAF8F5] text-xs font-medium uppercase tracking-wider hover:bg-[#2E2A27] transition-colors flex items-center gap-2 whitespace-nowrap shrink-0"
+                      className="px-6 py-3.5 bg-[#A83264] text-white rounded-lg text-xs font-medium uppercase tracking-wider hover:bg-[#8C2652] transition-colors flex items-center gap-2 whitespace-nowrap shrink-0"
                     >
-                      <span>Explore Curated Outfits</span>
+                      <span>Shop Kurti Collection</span>
                       <ArrowUpRight className="w-4 h-4" />
                     </button>
 
                     <button
                       type="button"
                       onClick={() => {
-                        setAtelierTab('styler');
-                        scrollToSection('capsule-styler');
+                        setUtilityTab('tracker');
+                        scrollToSection('size-and-tracker');
                       }}
-                      className="px-5 py-3.5 bg-white border border-[#181615] text-[#181615] text-xs font-medium uppercase tracking-wider hover:bg-[#F4F0EA] transition-colors whitespace-nowrap shrink-0"
+                      className="px-5 py-3.5 bg-white border border-[#EDD5E1] text-[#2A1621] rounded-lg text-xs font-medium uppercase tracking-wider hover:border-[#A83264] hover:bg-[#FCEEF4] transition-colors whitespace-nowrap shrink-0"
                     >
-                      Build 3-Piece Capsule
+                      Track COD Order
                     </button>
                   </div>
 
                   {/* Featured Campaign Look Callout */}
-                  <div className="pt-5 border-t border-[#E5E0D8] flex items-center justify-between gap-4 text-xs">
+                  <div className="pt-5 border-t border-[#EDD5E1] flex items-center justify-between gap-4 text-xs">
                     <div>
-                      <span className="text-[#6E675F] block">
-                        Pictured Campaign Ensemble
+                      <span className="text-[#6E4B5E] block">
+                        Pictured Featured Ensemble
                       </span>
-                      <strong className="text-[#181615] font-medium">
-                        Valéria Architectural Linen 3-Piece Suit (Blazer + Silk
-                        Camisole + Trousers)
+                      <strong className="text-[#2A1621] font-medium">
+                        Meher Rose-Berry Embroidered Muslin 3-Piece Kurti Set
                       </strong>
                     </div>
                     <button
                       type="button"
-                      onClick={() => setSelectedOutfitForPdp(outfits[0])}
-                      className="text-xs font-medium text-[#181615] underline underline-offset-4 hover:text-[#6E675F] whitespace-nowrap shrink-0"
+                      onClick={() => setSelectedOutfitForPdp(outfits[1] || outfits[0])}
+                      className="text-xs font-medium text-[#A83264] underline underline-offset-4 hover:text-[#2A1621] whitespace-nowrap shrink-0"
                     >
-                      Inspect Look ($680)
+                      View Set (৳2,450)
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Right 6 Cols: High-Fidelity Editorial Campaign Plate */}
-              <div className="lg:col-span-6 relative min-h-[380px] sm:min-h-[460px] bg-[#EFECE6] border border-[#E5E0D8] overflow-hidden">
+              {/* Right 6 Cols: High-Fidelity Kurti Campaign Image */}
+              <div className="lg:col-span-6 relative min-h-[360px] sm:min-h-[440px] bg-[#FCEEF4] border border-[#EDD5E1] rounded-2xl overflow-hidden shadow-sm">
                 <ResilientImage
                   src={HERO_CAMPAIGN_IMAGE}
-                  alt="Woman wearing the Valéria Ivory Linen 3-Piece Tailored Suit in a sunlit limestone courtyard"
+                  alt="Young South Asian woman wearing Jaybor Rose-Berry Embroidered Muslin 3-Piece Kurti Set"
                   className="w-full h-full lg:h-full object-cover object-center"
                 />
-                <div className="absolute bottom-0 inset-x-0 p-5 bg-gradient-to-t from-black/80 via-black/40 to-transparent text-[#FAF8F5] flex items-end justify-between gap-4">
+                <div className="absolute bottom-0 inset-x-0 p-5 bg-gradient-to-t from-[#2A1621]/85 via-[#2A1621]/45 to-transparent text-[#FFF9FB] flex items-end justify-between gap-4">
                   <div className="text-xs">
-                    <div className="uppercase tracking-widest text-[#D8CFC2]">
-                      Plate 01 · Limestone Courtyard Campaign
+                    <div className="uppercase tracking-widest text-[#F7E2EC]">
+                      Jaybor Signature · Dhakai Muslin & Organza
                     </div>
                     <div className="font-medium mt-0.5">
-                      100% Belgian Flax Linen & 19-Momme Mulberry Silk
+                      Sizes S (36") to XXL (44") · 100% Cash on Delivery
                     </div>
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleQuickAddCompleteSet(outfits[0])}
-                    className="px-3.5 py-2 bg-[#FAF8F5] text-[#181615] text-xs font-medium hover:bg-[#E5E0D8] transition-colors whitespace-nowrap shrink-0"
+                    onClick={() =>
+                      handleQuickAddKurti(outfits[1] || outfits[0])
+                    }
+                    className="px-3.5 py-2 bg-[#FFF9FB] text-[#2A1621] rounded-lg text-xs font-medium hover:bg-[#FCEEF4] transition-colors whitespace-nowrap shrink-0"
                   >
-                    Quick Add Set · $680
+                    Quick Add · ৳2,450
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Full-Width 4-Column Atelier Provenance & Commercial Terms Strip */}
-            <div className="mt-10 pt-8 border-t border-[#E5E0D8] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-xs">
+            {/* Full-Width 4-Column Bangladesh Service & Database Highlights */}
+            <div className="mt-10 pt-8 border-t border-[#EDD5E1] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-xs">
               <div>
-                <div className="font-semibold text-[#181615] uppercase tracking-wider">
-                  Complete Outfit Pricing
+                <div className="font-semibold text-[#A83264] uppercase tracking-wider">
+                  Cash on Delivery Only
                 </div>
-                <p className="text-[#57514A] mt-1">
-                  Save 12% automatically when purchasing any full styled look
-                  or 3-piece capsule vs. individual garments.
+                <p className="text-[#6E4B5E] mt-1">
+                  Zero advance payment required. Check your Kurti parcel in
+                  front of the delivery rider and pay cash.
                 </p>
               </div>
               <div>
-                <div className="font-semibold text-[#181615] uppercase tracking-wider">
-                  Certified Italian Mills
+                <div className="font-semibold text-[#A83264] uppercase tracking-wider">
+                  Fast BD Courier Rates
                 </div>
-                <p className="text-[#57514A] mt-1">
-                  Grade-6A Como mulberry silk, Biella Super 130s virgin wool,
-                  and GOTS-certified European flax linen.
+                <p className="text-[#6E4B5E] mt-1">
+                  Inside Dhaka ৳70 (24–48 hrs) · Outside Dhaka ৳130 (Steadfast &
+                  Pathao Courier) · Free over ৳2,500.
                 </p>
               </div>
               <div>
-                <div className="font-semibold text-[#181615] uppercase tracking-wider">
-                  Cash on Delivery & Card
+                <div className="font-semibold text-[#A83264] uppercase tracking-wider">
+                  Breathable Deshi Fabrics
                 </div>
-                <p className="text-[#57514A] mt-1">
-                  Settle online or choose verified Cash on Delivery (COD) with
-                  complimentary courier shipping over $450.
+                <p className="text-[#6E4B5E] mt-1">
+                  100% combed voile cotton, soft Dhakai muslin, and silk-cotton
+                  tailored for Bangladesh's climate.
                 </p>
               </div>
               <div>
-                <div className="font-semibold text-[#181615] uppercase tracking-wider">
-                  Merchant & Studio Ready
+                <div className="font-semibold text-[#A83264] uppercase tracking-wider">
+                  Live Order & Image Database
                 </div>
-                <p className="text-[#57514A] mt-1">
-                  Live inventory tracking, custom capsule styling, and instant
-                  listing management via the{' '}
+                <p className="text-[#6E4B5E] mt-1">
+                  Every order saves the ordered Kurti photo and customer address
+                  inside the{' '}
                   <button
                     type="button"
                     onClick={() => setIsSellerModalOpen(true)}
-                    className="underline text-[#181615] font-medium"
+                    className="underline text-[#A83264] font-semibold"
                   >
-                    Boutique Desk
+                    Jaybor Seller Desk
                   </button>
                   .
                 </p>
@@ -478,44 +780,44 @@ export default function App() {
           </div>
         </section>
 
-        {/* SECTION 2: Featured Female Outfits Collection Grid */}
+        {/* SECTION 2: Featured Jaybor Kurti Outfits Collection Grid */}
         <section
           id="collection-grid"
-          className="py-16 sm:py-20 max-w-[1280px] mx-auto px-4 sm:px-8"
+          className="py-14 sm:py-18 max-w-[1280px] mx-auto px-4 sm:px-8"
         >
           {/* Section Header */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-[#E5E0D8]">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-7 border-b border-[#EDD5E1]">
             <div>
-              <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-[#6E675F] mb-2">
-                <span>01. Curated Ensembles & Separates</span>
+              <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-[#6E4B5E] mb-2">
+                <span>01. Jaybor Kurti Catalog</span>
                 <span aria-hidden="true">·</span>
                 <span className="font-mono-num">
-                  {filteredOutfits.length} Styled Outfits Available
+                  {filteredOutfits.length} Kurti Outfits Ready to Ship
                 </span>
               </div>
-              <h2 className="font-display text-3xl sm:text-4xl font-semibold text-[#181615] tracking-tight">
-                Complete Female Outfits Collection
+              <h2 className="font-display text-3xl sm:text-4xl font-semibold text-[#2A1621] tracking-tight">
+                Curated Kurti Outfits Collection
               </h2>
             </div>
 
             {/* Search & Sort Controls */}
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative">
-                <Search className="w-3.5 h-3.5 text-[#787067] absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-3.5 h-3.5 text-[#8F6B7E] absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="search"
-                  aria-label="Search outfits by garment, fabric, or occasion"
+                  aria-label="Search Kurtis by fabric, color, or style"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search silk, blazer, linen..."
-                  className="pl-8 pr-3 py-2 text-xs bg-white border border-[#E5E0D8] text-[#181615] focus:outline-none focus:border-[#181615] w-52 sm:w-60"
+                  placeholder="Search cotton, muslin, blush..."
+                  className="pl-8 pr-3 py-2 text-xs bg-white border border-[#EDD5E1] rounded-lg text-[#2A1621] focus:outline-none focus:border-[#A83264] w-52 sm:w-60"
                 />
               </div>
 
-              <div className="flex items-center gap-1.5 bg-white border border-[#E5E0D8] px-3 py-2">
-                <SlidersHorizontal className="w-3.5 h-3.5 text-[#6E675F]" />
+              <div className="flex items-center gap-1.5 bg-white border border-[#EDD5E1] rounded-lg px-3 py-2">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-[#A83264]" />
                 <label htmlFor="sort-select" className="sr-only">
-                  Sort outfits
+                  Sort Kurtis
                 </label>
                 <select
                   id="sort-select"
@@ -529,12 +831,12 @@ export default function App() {
                         | 'savings-desc'
                     )
                   }
-                  className="text-xs bg-transparent text-[#181615] focus:outline-none"
+                  className="text-xs bg-transparent text-[#2A1621] focus:outline-none"
                 >
-                  <option value="featured">Sort: Editorial Featured</option>
-                  <option value="price-asc">Price: Low to High</option>
-                  <option value="price-desc">Price: High to Low</option>
-                  <option value="savings-desc">Highest Bundle Savings</option>
+                  <option value="featured">Sort: Featured Pookie Picks</option>
+                  <option value="price-asc">Price: Low to High (৳)</option>
+                  <option value="price-desc">Price: High to Low (৳)</option>
+                  <option value="savings-desc">Biggest Discount</option>
                 </select>
               </div>
             </div>
@@ -543,9 +845,9 @@ export default function App() {
           {/* Interactive Category Filter Bar (Functional Segmented Buttons) */}
           <div className="py-5 flex flex-wrap items-center justify-between gap-4">
             <div
-              className="flex flex-wrap items-center gap-1.5 p-1 bg-[#EFECE6] border border-[#E5E0D8]"
+              className="flex flex-wrap items-center gap-1.5 p-1 bg-[#FCEEF4] border border-[#EDD5E1] rounded-lg"
               role="group"
-              aria-label="Filter outfits by category"
+              aria-label="Filter Kurtis by category"
             >
               {CATEGORIES.map((cat) => {
                 const active = selectedCategory === cat;
@@ -554,10 +856,10 @@ export default function App() {
                     key={cat}
                     type="button"
                     onClick={() => setSelectedCategory(cat)}
-                    className={`px-3.5 py-2 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                    className={`px-3.5 py-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                       active
-                        ? 'bg-[#181615] text-[#FAF8F5]'
-                        : 'text-[#57514A] hover:text-[#181615]'
+                        ? 'bg-[#A83264] text-white shadow-xs'
+                        : 'text-[#5B2C44] hover:text-[#2A1621]'
                     }`}
                   >
                     {cat}
@@ -569,46 +871,49 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsSellerModalOpen(true)}
-              className="text-xs font-medium text-[#181615] underline underline-offset-4 hover:text-[#57514A] whitespace-nowrap shrink-0"
+              className="text-xs font-medium text-[#A83264] underline underline-offset-4 hover:text-[#2A1621] whitespace-nowrap shrink-0"
             >
-              + List New Outfit in Boutique Desk
+              + Add Kurti / View Customer Orders ({orders.length})
             </button>
           </div>
 
-          {/* 3-Column Product Grid */}
+          {/* 3-Column Kurti Product Grid */}
           {filteredOutfits.length === 0 ? (
-            <div className="py-16 text-center bg-white border border-[#E5E0D8] space-y-3">
-              <p className="font-display text-2xl text-[#181615]">
-                No ensembles match your current filter criteria.
+            <div className="py-16 text-center bg-white border border-[#EDD5E1] rounded-xl space-y-3">
+              <p className="font-display text-2xl text-[#2A1621]">
+                No Kurti outfits match your search.
               </p>
-              <p className="text-xs text-[#6E675F]">
-                Try clearing your search query or switching to All Outfits.
+              <p className="text-xs text-[#6E4B5E]">
+                Try clearing your search or selecting All Kurtis.
               </p>
               <button
                 type="button"
                 onClick={() => {
-                  setSelectedCategory('All Outfits');
+                  setSelectedCategory('All Kurtis');
                   setSearchQuery('');
                 }}
-                className="px-4 py-2 bg-[#181615] text-[#FAF8F5] text-xs font-medium uppercase tracking-wider whitespace-nowrap shrink-0"
+                className="px-4 py-2 bg-[#A83264] text-white rounded-lg text-xs font-medium uppercase tracking-wider whitespace-nowrap shrink-0"
               >
-                Reset Filters
+                Show All Kurtis
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-7 pt-2">
               {filteredOutfits.map((outfit) => {
-                const savings = outfit.individualTotal - outfit.completePrice;
+                const savings = Math.max(
+                  0,
+                  outfit.originalPriceBdt - outfit.priceBdt
+                );
                 const isQuickAdded = quickAddedId === outfit.id;
 
                 return (
                   <article
                     key={outfit.id}
-                    className="group bg-white border border-[#E5E0D8] flex flex-col justify-between transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                    className="group bg-white border border-[#EDD5E1] rounded-xl overflow-hidden flex flex-col justify-between transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-md"
                   >
                     <div>
                       {/* 3:4 Editorial Image Container */}
-                      <div className="relative aspect-[3/4] bg-[#EFECE6] overflow-hidden border-b border-[#E5E0D8]">
+                      <div className="relative aspect-[3/4] bg-[#FCEEF4] overflow-hidden border-b border-[#EDD5E1]">
                         <ResilientImage
                           src={outfit.imageUrl}
                           alt={outfit.title}
@@ -616,20 +921,20 @@ export default function App() {
                           className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-[1.02]"
                         />
 
-                        {/* Hover Quick Actions */}
-                        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 via-black/45 to-transparent flex items-center gap-2">
+                        {/* Quick Action Overlay */}
+                        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-[#2A1621]/85 via-[#2A1621]/45 to-transparent flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => setSelectedOutfitForPdp(outfit)}
-                            className="flex-1 py-2 px-3 bg-[#FAF8F5] text-[#181615] text-xs font-medium hover:bg-[#E5E0D8] transition-colors whitespace-nowrap shrink-0"
+                            className="flex-1 py-2 px-3 bg-[#FFF9FB] text-[#2A1621] rounded-md text-xs font-medium hover:bg-[#FCEEF4] transition-colors whitespace-nowrap shrink-0"
                           >
-                            Shop Look / Pieces
+                            View Details & Size
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleQuickAddCompleteSet(outfit)}
-                            aria-label={`Quick add complete ${outfit.title} set to bag`}
-                            className="py-2 px-3 bg-[#181615] text-[#FAF8F5] text-xs font-medium hover:bg-[#2E2A27] transition-colors flex items-center gap-1 whitespace-nowrap shrink-0"
+                            onClick={() => handleQuickAddKurti(outfit)}
+                            aria-label={`Quick add ${outfit.title} to COD bag`}
+                            className="py-2 px-3 bg-[#A83264] text-white rounded-md text-xs font-medium hover:bg-[#8C2652] transition-colors flex items-center gap-1 whitespace-nowrap shrink-0"
                           >
                             {isQuickAdded ? (
                               <>
@@ -637,72 +942,71 @@ export default function App() {
                                 <span>Added</span>
                               </>
                             ) : (
-                              <span>+ Set (${outfit.completePrice})</span>
+                              <span>
+                                + COD Bag (৳{outfit.priceBdt.toLocaleString()})
+                              </span>
                             )}
                           </button>
                         </div>
                       </div>
 
-                      {/* Card Body: Clean Unboxed Metadata + Title + Garment Breakdown */}
-                      <div className="p-5 space-y-3">
+                      {/* Card Body: Clean Unboxed Metadata + Title + Included Pieces */}
+                      <div className="p-5 space-y-2.5">
                         {/* Unboxed Metadata (Zero-Pill Rule) */}
-                        <div className="flex items-center justify-between text-xs text-[#6E675F] uppercase tracking-wider">
+                        <div className="flex items-center justify-between text-xs text-[#6E4B5E] uppercase tracking-wider">
                           <span>
-                            {outfit.category} · {outfit.pieces.length} Pieces
+                            {outfit.category} · {outfit.pieces.length}{' '}
+                            {outfit.pieces.length === 1 ? 'Pc' : 'Pcs'}
                           </span>
-                          <span>{outfit.statusTag}</span>
+                          <span className="text-[#A83264] font-medium">
+                            {outfit.statusTag}
+                          </span>
                         </div>
 
                         <div>
-                          <h3 className="text-base font-semibold text-[#181615] leading-snug">
+                          <h3 className="text-base font-semibold text-[#2A1621] leading-snug">
                             <button
                               type="button"
                               onClick={() => setSelectedOutfitForPdp(outfit)}
-                              className="text-left hover:underline underline-offset-4"
+                              className="text-left hover:text-[#A83264] transition-colors"
                             >
                               {outfit.title}
                             </button>
                           </h3>
-                          <p className="text-xs text-[#57514A] mt-1 line-clamp-2 leading-relaxed">
+                          <p className="text-xs text-[#6E4B5E] mt-1 line-clamp-2 leading-relaxed">
                             {outfit.subtitle}
                           </p>
                         </div>
 
-                        {/* Individual Garment List Preview */}
-                        <div className="pt-2 border-t border-[#F0ECE3] space-y-1">
-                          {outfit.pieces.map((piece) => (
-                            <div
-                              key={piece.id}
-                              className="flex items-center justify-between text-[11px] text-[#6E675F]"
-                            >
-                              <span className="truncate pr-2">
-                                {piece.name}
-                              </span>
-                              <span className="font-mono-num shrink-0">
-                                ${piece.price}
-                              </span>
-                            </div>
-                          ))}
+                        <div className="pt-2 border-t border-[#FCEEF4] text-[11px] text-[#6E4B5E] flex items-center justify-between">
+                          <span className="truncate pr-2">{outfit.fabric}</span>
+                          <span className="font-mono-num shrink-0">
+                            {outfit.lengthInches.split('·')[0]}
+                          </span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Card Footer: Baseline-Aligned Tabular Price & Colorway Swatches */}
-                    <div className="px-5 py-3.5 border-t border-[#E5E0D8] bg-[#FAF8F5] flex items-center justify-between">
+                    {/* Card Footer: Baseline-Aligned Tabular BDT Price & Colorway Swatches */}
+                    <div className="px-5 py-3.5 border-t border-[#EDD5E1] bg-[#FFF9FB] flex items-center justify-between">
                       <div>
                         <div className="flex items-baseline gap-2">
-                          <span className="text-[15px] font-semibold text-[#181615] font-mono-num">
-                            ${outfit.completePrice}
+                          <span className="text-[16px] font-semibold text-[#A83264] font-mono-num">
+                            ৳{outfit.priceBdt.toLocaleString()}
                           </span>
-                          <span className="text-xs text-[#787067] line-through font-mono-num">
-                            ${outfit.individualTotal}
-                          </span>
-                          <span className="text-[11px] text-[#0E4D3B] font-medium">
-                            Save ${savings}
-                          </span>
+                          {savings > 0 && (
+                            <>
+                              <span className="text-xs text-[#8F6B7E] line-through font-mono-num">
+                                ৳{outfit.originalPriceBdt.toLocaleString()}
+                              </span>
+                              <span className="text-[11px] text-[#2A1621] font-medium">
+                                Save ৳{savings}
+                              </span>
+                            </>
+                          )}
                         </div>
-                        <span className="block text-[11px] text-[#6E675F]">
-                          Complete Outfit Price · Sizes XS–XL
+                        <span className="block text-[11px] text-[#6E4B5E]">
+                          Cash on Delivery · Sizes 36"–44"
                         </span>
                       </div>
 
@@ -711,7 +1015,7 @@ export default function App() {
                           <span
                             key={c.name}
                             title={c.name}
-                            className="w-3.5 h-3.5 border border-black/25"
+                            className="w-3.5 h-3.5 rounded-full border border-black/20"
                             style={{ backgroundColor: c.hex }}
                           />
                         ))}
@@ -724,72 +1028,73 @@ export default function App() {
           )}
         </section>
 
-        {/* SECTION 3: Interactive 3-Piece Capsule Styler & Fit Studio */}
+        {/* SECTION 3: BD Kurti Size Calculator & Live COD Order Tracker */}
         <CapsuleStylerSection
-          activeTab={atelierTab}
-          onTabChange={setAtelierTab}
-          onAddCustomCapsuleToCart={handleAddCustomCapsule}
+          activeTab={utilityTab}
+          onTabChange={setUtilityTab}
+          orders={orders}
         />
       </main>
 
-      {/* SECTION 4: Quiet Editorial Footer */}
-      <footer className="bg-[#181615] text-[#FAF8F5] border-t border-[#2E2A27]">
+      {/* SECTION 4: Quiet Classic Footer */}
+      <footer className="bg-[#2A1621] text-[#FFF9FB] border-t border-[#472538]">
         <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-12 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
           <div className="space-y-2 max-w-md">
-            <span className="font-display text-2xl font-semibold tracking-tight block">
-              Maison Valéria
+            <span className="font-display text-2xl font-semibold tracking-tight text-[#F7E2EC] block">
+              Jaybor
             </span>
-            <p className="text-xs text-[#A8A096] leading-relaxed">
-              Direct-to-client luxury womenswear and complete styled ensembles.
-              Patterned in Milan, woven from certified Italian silk, wool, and
-              flax linen.
+            <p className="text-xs text-[#D8B4C6] leading-relaxed">
+              Modern classic & pookie Kurti outfits boutique in Bangladesh.
+              Soft cotton, muslin, and festive 3-piece sets delivered to all 64
+              districts with Cash on Delivery.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-6 text-xs text-[#D8CFC2]">
+          <div className="flex flex-wrap items-center gap-6 text-xs text-[#F7E2EC]">
             <a
               href="#collection-grid"
               className="hover:text-white transition-colors whitespace-nowrap shrink-0"
             >
-              Outfits Catalog
+              Kurti Catalog
             </a>
             <a
-              href="#capsule-styler"
-              onClick={() => setAtelierTab('styler')}
+              href="#size-and-tracker"
+              onClick={() => setUtilityTab('sizing')}
               className="hover:text-white transition-colors whitespace-nowrap shrink-0"
             >
-              3-Piece Capsule Builder
+              BD Size Calculator
             </a>
             <a
-              href="#capsule-styler"
-              onClick={() => setAtelierTab('sizing')}
+              href="#size-and-tracker"
+              onClick={() => setUtilityTab('tracker')}
               className="hover:text-white transition-colors whitespace-nowrap shrink-0"
             >
-              Size & Fit Calculator
+              Track COD Order
             </a>
             <button
               type="button"
               onClick={() => setIsSellerModalOpen(true)}
               className="hover:text-white underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
             >
-              Boutique Seller Desk ({orders.length} Orders)
+              Seller & Order Database ({orders.length} Orders)
             </button>
             <button
               type="button"
-              onClick={() => setIsCartOpen(true)}
+              onClick={() => {
+                setCartInitialStep('bag');
+                setIsCartOpen(true);
+              }}
               className="hover:text-white transition-colors whitespace-nowrap shrink-0"
             >
-              Shopping Bag ({cartSummary.itemCount})
+              COD Bag ({cartSummary.itemCount})
             </button>
           </div>
         </div>
-        <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-4 border-t border-[#2E2A27] flex flex-col sm:flex-row items-center justify-between text-[11px] text-[#787067] gap-2">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-4 border-t border-[#472538] flex flex-col sm:flex-row items-center justify-between text-[11px] text-[#B891A5] gap-2">
+          <span>© 2026 Jaybor Bangladesh. All rights reserved.</span>
           <span>
-            © 2026 Maison Valéria Atelier S.r.l. All rights reserved.
-          </span>
-          <span>
-            Milan · Paris · Complimentary Express Garment-on-Hanger Courier over
-            $450
+            Dhaka · Chattogram · Sylhet · Rajshahi · Khulna · 100% Cash on
+            Delivery
           </span>
         </div>
       </footer>
@@ -798,29 +1103,36 @@ export default function App() {
       <OutfitDetailModal
         outfit={selectedOutfitForPdp}
         onClose={() => setSelectedOutfitForPdp(null)}
-        onAddToCart={handleAddToCartFromPdp}
+        onAddToCart={handleAddToCart}
+        onOrderNowCod={handleOrderNowCodFromPdp}
         onOpenSizeGuide={() => {
-          setAtelierTab('sizing');
-          scrollToSection('capsule-styler');
+          setUtilityTab('sizing');
+          scrollToSection('size-and-tracker');
         }}
       />
 
-      {/* Slide-Over Shopping Bag & Checkout Drawer */}
+      {/* Slide-Over Shopping Bag & COD Checkout Drawer */}
       <CartCheckoutDrawer
         isOpen={isCartOpen}
+        initialStep={cartInitialStep}
         onClose={() => setIsCartOpen(false)}
         cartItems={cartItems}
+        currentUserUid={currentUser?.uid || null}
         onUpdateQuantity={handleUpdateCartQuantity}
         onRemoveItem={handleRemoveCartItem}
         onCompleteOrder={handleCompleteOrder}
       />
 
-      {/* Boutique Seller & Inventory Management Modal */}
+      {/* Jaybor Seller & Customer Order Details Database Modal */}
       <BoutiqueSellerModal
         isOpen={isSellerModalOpen}
         onClose={() => setIsSellerModalOpen(false)}
         outfits={outfits}
         orders={orders}
+        currentUserEmail={currentUser?.email || null}
+        isCloudSynced={Boolean(currentUser?.emailVerified)}
+        onGoogleSignIn={handleGoogleSignIn}
+        onGoogleSignOut={handleGoogleSignOut}
         onAddOutfit={handleAddNewOutfitListing}
         onUpdateOrderStatus={handleUpdateOrderStatus}
         onRestockOutfit={handleRestockOutfit}

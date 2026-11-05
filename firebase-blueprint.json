@@ -1,0 +1,284 @@
+{
+  "entities": {
+    "Outfit": {
+      "title": "Outfit",
+      "description": "A Kurti outfit product in the Jaybor Bangladesh catalog.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Name of the Kurti outfit.",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "subtitle": {
+          "type": "string",
+          "description": "Short description of included pieces and embroidery.",
+          "minLength": 5,
+          "maxLength": 240
+        },
+        "category": {
+          "type": "string",
+          "description": "Kurti outfit category.",
+          "enum": [
+            "Daily Cotton Kurti",
+            "2-Piece Kurti Set",
+            "Festive 3-Piece",
+            "Pookie Pastel Edition"
+          ]
+        },
+        "priceBdt": {
+          "type": "number",
+          "description": "Selling price in Bangladeshi Taka (BDT)."
+        },
+        "originalPriceBdt": {
+          "type": "number",
+          "description": "Original compare-at price in BDT."
+        },
+        "fabric": {
+          "type": "string",
+          "description": "Fabric and weave details.",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "colorName": {
+          "type": "string",
+          "description": "Display name of the colorway.",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "colorHex": {
+          "type": "string",
+          "description": "Hex color code for swatch display.",
+          "minLength": 4,
+          "maxLength": 9,
+          "pattern": "^#[0-9A-Fa-f]{3,8}$"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL or asset path of the Kurti outfit photo.",
+          "minLength": 5,
+          "maxLength": 500
+        },
+        "stockCount": {
+          "type": "number",
+          "description": "Available quantity in stock."
+        },
+        "statusTag": {
+          "type": "string",
+          "description": "Inventory status label.",
+          "enum": ["In Stock", "Limited Edition", "New Arrival"]
+        },
+        "sizes": {
+          "type": "array",
+          "description": "Available Bangladeshi Kurti sizes (max 6)."
+        },
+        "isPublished": {
+          "type": "boolean",
+          "description": "Whether the outfit is visible in the public catalog."
+        },
+        "authorUid": {
+          "type": "string",
+          "description": "UID of the admin who created the outfit.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": [
+        "title",
+        "subtitle",
+        "category",
+        "priceBdt",
+        "originalPriceBdt",
+        "fabric",
+        "colorName",
+        "colorHex",
+        "imageUrl",
+        "stockCount",
+        "statusTag",
+        "sizes",
+        "isPublished",
+        "authorUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A customer Cash on Delivery order in Bangladesh with ordered outfit image details.",
+      "type": "object",
+      "properties": {
+        "orderNumber": {
+          "type": "string",
+          "description": "Human-readable order code (e.g. JB-2041).",
+          "minLength": 4,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "customerUid": {
+          "type": "string",
+          "description": "Authenticated UID of the customer or admin recording the order.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "customerName": {
+          "type": "string",
+          "description": "Recipient full name.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "phone": {
+          "type": "string",
+          "description": "Bangladesh 11-digit mobile number (01XXXXXXXXX).",
+          "minLength": 11,
+          "maxLength": 14,
+          "pattern": "^(\\+?88)?01[3-9][0-9]{8}$"
+        },
+        "district": {
+          "type": "string",
+          "description": "District or Thana in Bangladesh.",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "address": {
+          "type": "string",
+          "description": "Full street/house delivery address.",
+          "minLength": 5,
+          "maxLength": 300
+        },
+        "deliveryZone": {
+          "type": "string",
+          "description": "Courier zone in Bangladesh.",
+          "enum": ["Inside Dhaka", "Outside Dhaka"]
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "Payment settlement method.",
+          "enum": ["Cash on Delivery"]
+        },
+        "primaryOutfitTitle": {
+          "type": "string",
+          "description": "Summary of ordered Kurti outfit(s) and sizes.",
+          "minLength": 3,
+          "maxLength": 300
+        },
+        "primaryOutfitImage": {
+          "type": "string",
+          "description": "Image path/URL of the primary ordered Kurti outfit.",
+          "minLength": 5,
+          "maxLength": 500
+        },
+        "itemSummaryList": {
+          "type": "array",
+          "description": "Bounded list (max 10) of formatted line item strings."
+        },
+        "totalQuantity": {
+          "type": "number",
+          "description": "Total number of Kurti outfits in the order."
+        },
+        "subtotalBdt": {
+          "type": "number",
+          "description": "Items subtotal in BDT."
+        },
+        "deliveryFeeBdt": {
+          "type": "number",
+          "description": "Courier fee in BDT (70 Inside Dhaka, 130 Outside Dhaka, or 0)."
+        },
+        "discountBdt": {
+          "type": "number",
+          "description": "Promo discount in BDT."
+        },
+        "totalBdt": {
+          "type": "number",
+          "description": "Final Cash on Delivery payable amount in BDT."
+        },
+        "status": {
+          "type": "string",
+          "description": "Order fulfillment status.",
+          "enum": [
+            "Pending Call Verification",
+            "Confirmed — Packing Kurti",
+            "Sent to Steadfast Courier",
+            "Delivered"
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when order was placed."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when order was last updated."
+        }
+      },
+      "required": [
+        "orderNumber",
+        "customerUid",
+        "customerName",
+        "phone",
+        "district",
+        "address",
+        "deliveryZone",
+        "paymentMethod",
+        "primaryOutfitTitle",
+        "primaryOutfitImage",
+        "itemSummaryList",
+        "totalQuantity",
+        "subtotalBdt",
+        "deliveryFeeBdt",
+        "discountBdt",
+        "totalBdt",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Trusted admin registry document.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Verified admin email.",
+          "minLength": 5,
+          "maxLength": 120
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp."
+        }
+      },
+      "required": ["email", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/outfits/{outfitId}": {
+      "schema": { "$ref": "#/entities/Outfit" },
+      "description": "Catalog of Jaybor Kurti outfits."
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer Cash on Delivery orders with outfit image and delivery details."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Trusted store administrator UIDs."
+    }
+  }
+}

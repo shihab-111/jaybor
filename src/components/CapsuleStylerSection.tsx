@@ -1,594 +1,352 @@
 import React, { useState } from 'react';
-import { Layers, Ruler, Check, ShoppingBag } from 'lucide-react';
+import { Ruler, PackageSearch, Search } from 'lucide-react';
 import {
-  calculateCapsuleBundle,
-  recommendGarmentSize,
-  type CapsulePieceOption,
-  type GarmentSize,
+  recommendKurtiSize,
+  type OrderRecord,
 } from '../utils/commerceLogic';
-import { CAPSULE_STYLER_OPTIONS } from '../data/outfitsData';
+import { ResilientImage } from './ResilientImage';
 
 interface CapsuleStylerSectionProps {
-  activeTab: 'styler' | 'sizing';
-  onTabChange: (tab: 'styler' | 'sizing') => void;
-  onAddCustomCapsuleToCart: (payload: {
-    top: CapsulePieceOption;
-    bottom: CapsulePieceOption;
-    outerwear: CapsulePieceOption;
-    size: GarmentSize;
-    bundlePrice: number;
-    individualSum: number;
-  }) => void;
+  activeTab: 'sizing' | 'tracker';
+  onTabChange: (tab: 'sizing' | 'tracker') => void;
+  orders: OrderRecord[];
 }
 
 export const CapsuleStylerSection: React.FC<CapsuleStylerSectionProps> = ({
   activeTab,
   onTabChange,
-  onAddCustomCapsuleToCart,
+  orders,
 }) => {
-  // Capsule Styler State
-  const [selectedTop, setSelectedTop] = useState<CapsulePieceOption>(
-    CAPSULE_STYLER_OPTIONS.tops[0]
-  );
-  const [selectedBottom, setSelectedBottom] = useState<CapsulePieceOption>(
-    CAPSULE_STYLER_OPTIONS.bottoms[0]
-  );
-  const [selectedOuterwear, setSelectedOuterwear] =
-    useState<CapsulePieceOption>(CAPSULE_STYLER_OPTIONS.outerwear[0]);
-  const [capsuleSize, setCapsuleSize] = useState<GarmentSize>('S');
-  const [capsuleAdded, setCapsuleAdded] = useState(false);
+  // Size Calculator State (Bangladeshi Chest Measurement in Inches)
+  const [chestInches, setChestInches] = useState<number>(38);
+  const [fitPref, setFitPref] = useState<'Regular' | 'Relaxed'>('Regular');
 
-  // Size Calculator State
-  const [bustCm, setBustCm] = useState<number>(87);
-  const [waistCm, setWaistCm] = useState<number>(69);
-  const [hipCm, setHipCm] = useState<number>(95);
-  const [fitPref, setFitPref] = useState<'Tailored' | 'Signature' | 'Relaxed'>(
-    'Signature'
-  );
+  // Order Tracker Lookup State
+  const [lookupQuery, setLookupQuery] = useState<string>('');
 
-  const bundleMath = calculateCapsuleBundle(
-    selectedTop,
-    selectedBottom,
-    selectedOuterwear
-  );
+  const sizeRec = recommendKurtiSize(chestInches, fitPref);
 
-  const sizeRecommendation = recommendGarmentSize(
-    bustCm,
-    waistCm,
-    hipCm,
-    fitPref
-  );
-
-  const handleAddCapsule = () => {
-    onAddCustomCapsuleToCart({
-      top: selectedTop,
-      bottom: selectedBottom,
-      outerwear: selectedOuterwear,
-      size: capsuleSize,
-      bundlePrice: bundleMath.bundlePrice,
-      individualSum: bundleMath.individualSum,
-    });
-    setCapsuleAdded(true);
-    setTimeout(() => setCapsuleAdded(false), 1500);
-  };
+  const matchedOrders = orders.filter((ord) => {
+    const q = lookupQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      ord.orderNumber.toLowerCase().includes(q) ||
+      ord.phone.toLowerCase().includes(q) ||
+      ord.customerName.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <section
-      id="capsule-styler"
-      className="py-16 sm:py-20 border-t border-[#E5E0D8] bg-[#F4F0EA]"
+      id="size-and-tracker"
+      className="py-14 sm:py-18 border-t border-[#EDD5E1] bg-[#FCEEF4]/70"
     >
       <div className="max-w-[1280px] mx-auto px-4 sm:px-8">
         {/* Section Header with Interactive Mode Tabs */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-10 border-b border-[#E5E0D8]">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-[#EDD5E1]">
           <div>
-            <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-[#6E675F] mb-2">
-              <span>02. Bespoke Wardrobe Architecture</span>
+            <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-[#6E4B5E] mb-2">
+              <span>02. Jaybor Customer Care & Fit Studio</span>
               <span aria-hidden="true">·</span>
-              <span>12% Complete Set Reduction</span>
+              <span>All 64 Districts in Bangladesh</span>
             </div>
-            <h2 className="font-display text-3xl sm:text-4xl font-semibold text-[#181615] tracking-tight">
-              Capsule Outfit Styler & Atelier Fit Studio
+            <h2 className="font-display text-3xl sm:text-4xl font-semibold text-[#2A1621] tracking-tight">
+              BD Kurti Size Guide & Live Order Tracker
             </h2>
           </div>
 
           {/* Functional Segmented Tab Bar */}
           <div
-            className="inline-flex items-center gap-1 p-1 bg-[#E5E0D8] self-start"
+            className="inline-flex items-center gap-1 p-1 bg-[#F7E2EC] border border-[#EDD5E1] rounded-lg self-start"
             role="tablist"
-            aria-label="Atelier interactive tools"
+            aria-label="Jaybor customer utilities"
           >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'styler'}
-              onClick={() => onTabChange('styler')}
-              className={`px-4 py-2 text-xs font-medium transition-colors flex items-center gap-2 whitespace-nowrap shrink-0 ${
-                activeTab === 'styler'
-                  ? 'bg-[#181615] text-[#FAF8F5]'
-                  : 'text-[#4A443F] hover:text-[#181615]'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>3-Piece Capsule Builder</span>
-            </button>
             <button
               type="button"
               role="tab"
               aria-selected={activeTab === 'sizing'}
               onClick={() => onTabChange('sizing')}
-              className={`px-4 py-2 text-xs font-medium transition-colors flex items-center gap-2 whitespace-nowrap shrink-0 ${
+              className={`px-4 py-2 text-xs font-medium rounded-md transition-colors flex items-center gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === 'sizing'
-                  ? 'bg-[#181615] text-[#FAF8F5]'
-                  : 'text-[#4A443F] hover:text-[#181615]'
+                  ? 'bg-[#A83264] text-white shadow-xs'
+                  : 'text-[#5B2C44] hover:text-[#2A1621]'
               }`}
             >
               <Ruler className="w-3.5 h-3.5" />
-              <span>Interactive Size & Fit Calculator</span>
+              <span>BD Kurti Size Calculator</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'tracker'}
+              onClick={() => onTabChange('tracker')}
+              className={`px-4 py-2 text-xs font-medium rounded-md transition-colors flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                activeTab === 'tracker'
+                  ? 'bg-[#A83264] text-white shadow-xs'
+                  : 'text-[#5B2C44] hover:text-[#2A1621]'
+              }`}
+            >
+              <PackageSearch className="w-3.5 h-3.5" />
+              <span>Track COD Order ({orders.length})</span>
             </button>
           </div>
         </div>
 
-        {activeTab === 'styler' ? (
-          <div className="pt-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* Left 8 Cols: 3-Slot Garment Selector */}
-            <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Slot 1: Top & Knit */}
-              <div className="bg-[#FAF8F5] border border-[#E5E0D8] p-5">
-                <div className="text-xs text-[#6E675F] uppercase tracking-wider mb-1">
-                  Layer 01 · Base Top
-                </div>
-                <h3 className="text-sm font-semibold text-[#181615] mb-4">
-                  Select Silk or Knit Top
-                </h3>
-                <div className="space-y-2.5">
-                  {CAPSULE_STYLER_OPTIONS.tops.map((item) => {
-                    const active = selectedTop.id === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setSelectedTop(item)}
-                        className={`w-full text-left p-3 border transition-colors ${
-                          active
-                            ? 'border-[#181615] bg-white'
-                            : 'border-[#E5E0D8] bg-[#FAF8F5] hover:border-[#A8A096]'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-semibold text-[#181615]">
-                            {item.name}
-                          </span>
-                          <span className="text-xs font-mono-num text-[#181615] shrink-0">
-                            ${item.price}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1.5 text-[11px] text-[#6E675F]">
-                          <span
-                            className="w-2.5 h-2.5 border border-black/20 shrink-0"
-                            style={{ backgroundColor: item.swatchHex }}
-                          />
-                          <span>{item.color}</span>
-                          <span aria-hidden="true">·</span>
-                          <span className="truncate">{item.fabric}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Slot 2: Bottom & Skirt */}
-              <div className="bg-[#FAF8F5] border border-[#E5E0D8] p-5">
-                <div className="text-xs text-[#6E675F] uppercase tracking-wider mb-1">
-                  Layer 02 · Trousers or Skirt
-                </div>
-                <h3 className="text-sm font-semibold text-[#181615] mb-4">
-                  Select Tailored Bottom
-                </h3>
-                <div className="space-y-2.5">
-                  {CAPSULE_STYLER_OPTIONS.bottoms.map((item) => {
-                    const active = selectedBottom.id === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setSelectedBottom(item)}
-                        className={`w-full text-left p-3 border transition-colors ${
-                          active
-                            ? 'border-[#181615] bg-white'
-                            : 'border-[#E5E0D8] bg-[#FAF8F5] hover:border-[#A8A096]'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-semibold text-[#181615]">
-                            {item.name}
-                          </span>
-                          <span className="text-xs font-mono-num text-[#181615] shrink-0">
-                            ${item.price}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1.5 text-[11px] text-[#6E675F]">
-                          <span
-                            className="w-2.5 h-2.5 border border-black/20 shrink-0"
-                            style={{ backgroundColor: item.swatchHex }}
-                          />
-                          <span>{item.color}</span>
-                          <span aria-hidden="true">·</span>
-                          <span className="truncate">{item.fabric}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Slot 3: Outerwear & Layer */}
-              <div className="bg-[#FAF8F5] border border-[#E5E0D8] p-5">
-                <div className="text-xs text-[#6E675F] uppercase tracking-wider mb-1">
-                  Layer 03 · Architectural Outer
-                </div>
-                <h3 className="text-sm font-semibold text-[#181615] mb-4">
-                  Select Blazer, Trench or Wrap
-                </h3>
-                <div className="space-y-2.5">
-                  {CAPSULE_STYLER_OPTIONS.outerwear.map((item) => {
-                    const active = selectedOuterwear.id === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setSelectedOuterwear(item)}
-                        className={`w-full text-left p-3 border transition-colors ${
-                          active
-                            ? 'border-[#181615] bg-white'
-                            : 'border-[#E5E0D8] bg-[#FAF8F5] hover:border-[#A8A096]'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-semibold text-[#181615]">
-                            {item.name}
-                          </span>
-                          <span className="text-xs font-mono-num text-[#181615] shrink-0">
-                            ${item.price}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1.5 text-[11px] text-[#6E675F]">
-                          <span
-                            className="w-2.5 h-2.5 border border-black/20 shrink-0"
-                            style={{ backgroundColor: item.swatchHex }}
-                          />
-                          <span>{item.color}</span>
-                          <span aria-hidden="true">·</span>
-                          <span className="truncate">{item.fabric}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Right 4 Cols: Assembled Capsule Outfit Summary & Purchase */}
-            <div className="lg:col-span-4 bg-[#FAF8F5] border border-[#181615] p-6 space-y-5">
+        {activeTab === 'sizing' ? (
+          <div className="pt-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            {/* Left 7 Cols: Interactive Chest Size Calculator & Chart */}
+            <div className="lg:col-span-7 bg-[#FFF9FB] border border-[#EDD5E1] rounded-xl p-6 sm:p-8 space-y-6">
               <div>
-                <div className="text-xs text-[#6E675F] uppercase tracking-wider">
-                  Your Curated 3-Piece Ensemble
+                <div className="text-xs text-[#6E4B5E] uppercase tracking-wider">
+                  Bangladeshi Boutique Grading (36" to 44" Chest)
                 </div>
-                <h3 className="font-display text-2xl font-semibold text-[#181615] mt-1">
-                  Bespoke Capsule Pairing
+                <h3 className="font-display text-2xl font-semibold text-[#2A1621] mt-1">
+                  Find Your Perfect Jaybor Kurti Size
                 </h3>
-              </div>
-
-              {/* Color Harmony Swatch Bar */}
-              <div className="flex items-center gap-3 p-3 bg-[#F4F0EA] border border-[#E5E0D8]">
-                <div className="flex -space-x-1">
-                  <span
-                    className="w-6 h-6 border border-black/20"
-                    style={{ backgroundColor: selectedTop.swatchHex }}
-                    title={selectedTop.color}
-                  />
-                  <span
-                    className="w-6 h-6 border border-black/20"
-                    style={{ backgroundColor: selectedBottom.swatchHex }}
-                    title={selectedBottom.color}
-                  />
-                  <span
-                    className="w-6 h-6 border border-black/20"
-                    style={{ backgroundColor: selectedOuterwear.swatchHex }}
-                    title={selectedOuterwear.color}
-                  />
-                </div>
-                <div className="text-xs text-[#4A443F]">
-                  Palette: {selectedTop.color.split(' ')[0]} ·{' '}
-                  {selectedBottom.color.split(' ')[0]} ·{' '}
-                  {selectedOuterwear.color.split(' ')[0]}
-                </div>
-              </div>
-
-              {/* Selected Pieces List */}
-              <div className="divide-y divide-[#E5E0D8] text-xs">
-                <div className="py-2.5 flex items-center justify-between">
-                  <div>
-                    <span className="text-[#6E675F] block">Top</span>
-                    <span className="font-medium text-[#181615]">
-                      {selectedTop.name}
-                    </span>
-                  </div>
-                  <span className="font-mono-num text-[#181615]">
-                    ${selectedTop.price}
-                  </span>
-                </div>
-                <div className="py-2.5 flex items-center justify-between">
-                  <div>
-                    <span className="text-[#6E675F] block">Bottom</span>
-                    <span className="font-medium text-[#181615]">
-                      {selectedBottom.name}
-                    </span>
-                  </div>
-                  <span className="font-mono-num text-[#181615]">
-                    ${selectedBottom.price}
-                  </span>
-                </div>
-                <div className="py-2.5 flex items-center justify-between">
-                  <div>
-                    <span className="text-[#6E675F] block">Outerwear</span>
-                    <span className="font-medium text-[#181615]">
-                      {selectedOuterwear.name}
-                    </span>
-                  </div>
-                  <span className="font-mono-num text-[#181615]">
-                    ${selectedOuterwear.price}
-                  </span>
-                </div>
-              </div>
-
-              {/* Size Selector */}
-              <div>
-                <span className="block text-xs font-medium uppercase tracking-wider text-[#57514A] mb-2">
-                  Select Ensemble Size: <strong className="text-[#181615]">{capsuleSize}</strong>
-                </span>
-                <div className="flex items-center gap-1.5">
-                  {(['XS', 'S', 'M', 'L', 'XL'] as GarmentSize[]).map((sz) => (
-                    <button
-                      key={sz}
-                      type="button"
-                      onClick={() => setCapsuleSize(sz)}
-                      className={`flex-1 py-2 text-xs font-medium border transition-colors whitespace-nowrap shrink-0 ${
-                        capsuleSize === sz
-                          ? 'bg-[#181615] text-[#FAF8F5] border-[#181615]'
-                          : 'bg-white text-[#181615] border-[#E5E0D8] hover:border-[#181615]'
-                      }`}
-                    >
-                      {sz}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Bundle Price Calculation */}
-              <div className="pt-3 border-t border-[#E5E0D8] space-y-1.5 text-xs">
-                <div className="flex justify-between text-[#6E675F]">
-                  <span>Individual Garments Total</span>
-                  <span className="font-mono-num line-through">
-                    ${bundleMath.individualSum}
-                  </span>
-                </div>
-                <div className="flex justify-between text-[#181615] font-medium">
-                  <span>12% Complete Capsule Reduction</span>
-                  <span className="font-mono-num">
-                    -${bundleMath.savingsAmount}
-                  </span>
-                </div>
-                <div className="flex justify-between items-baseline pt-2 border-t border-[#E5E0D8]">
-                  <span className="text-sm font-semibold text-[#181615]">
-                    Complete Capsule Price
-                  </span>
-                  <span className="text-xl font-semibold text-[#181615] font-mono-num">
-                    ${bundleMath.bundlePrice}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleAddCapsule}
-                className="w-full py-3.5 px-5 bg-[#181615] text-[#FAF8F5] hover:bg-[#2E2A27] text-xs font-medium uppercase tracking-wider transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
-              >
-                {capsuleAdded ? (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>Custom Capsule Added to Bag</span>
-                  </>
-                ) : (
-                  <>
-                    <ShoppingBag className="w-4 h-4" />
-                    <span>Add 3-Piece Capsule — ${bundleMath.bundlePrice}</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* Interactive Size & Fit Calculator + Client Proof */
-          <div className="pt-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:col-span-7 bg-[#FAF8F5] border border-[#E5E0D8] p-6 sm:p-8 space-y-6">
-              <div>
-                <div className="text-xs text-[#6E675F] uppercase tracking-wider">
-                  Italian Pattern Block Grading (XS – XL)
-                </div>
-                <h3 className="font-display text-2xl font-semibold text-[#181615] mt-1">
-                  Calculate Your Exact Maison Valéria Size
-                </h3>
-                <p className="text-xs text-[#57514A] mt-1">
-                  Enter your body measurements in centimeters to receive your
-                  tailored pattern recommendation across blazers, dresses, and
-                  high-waisted trousers.
+                <p className="text-xs text-[#6E4B5E] mt-1">
+                  Slide to select your chest/bust measurement in inches and
+                  choose how airy you prefer your Kurti fit.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
                 <div>
                   <label
-                    htmlFor="bust-input"
-                    className="block text-xs font-medium text-[#181615] mb-1.5"
+                    htmlFor="chest-inches-input"
+                    className="block text-xs font-medium text-[#2A1621] mb-2"
                   >
-                    Bust Circumference:{' '}
-                    <span className="font-mono-num font-semibold">
-                      {bustCm} cm
+                    Your Chest / Bust Measurement:{' '}
+                    <span className="font-mono-num font-semibold text-[#A83264]">
+                      {chestInches} inches
                     </span>
                   </label>
                   <input
-                    id="bust-input"
+                    id="chest-inches-input"
                     type="range"
-                    min={76}
-                    max={112}
-                    value={bustCm}
-                    onChange={(e) => setBustCm(Number(e.target.value))}
-                    className="w-full accent-[#181615]"
+                    min={34}
+                    max={45}
+                    value={chestInches}
+                    onChange={(e) => setChestInches(Number(e.target.value))}
+                    className="w-full accent-[#A83264]"
                   />
-                  <div className="flex justify-between text-[11px] text-[#787067] font-mono-num mt-1">
-                    <span>76 cm</span>
-                    <span>112 cm</span>
+                  <div className="flex justify-between text-[11px] text-[#6E4B5E] font-mono-num mt-1">
+                    <span>34 in</span>
+                    <span>38 in</span>
+                    <span>42 in</span>
+                    <span>45 in</span>
                   </div>
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="waist-input"
-                    className="block text-xs font-medium text-[#181615] mb-1.5"
-                  >
-                    Natural Waist:{' '}
-                    <span className="font-mono-num font-semibold">
-                      {waistCm} cm
-                    </span>
-                  </label>
-                  <input
-                    id="waist-input"
-                    type="range"
-                    min={58}
-                    max={96}
-                    value={waistCm}
-                    onChange={(e) => setWaistCm(Number(e.target.value))}
-                    className="w-full accent-[#181615]"
-                  />
-                  <div className="flex justify-between text-[11px] text-[#787067] font-mono-num mt-1">
-                    <span>58 cm</span>
-                    <span>96 cm</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="hip-input"
-                    className="block text-xs font-medium text-[#181615] mb-1.5"
-                  >
-                    Full Hip:{' '}
-                    <span className="font-mono-num font-semibold">
-                      {hipCm} cm
-                    </span>
-                  </label>
-                  <input
-                    id="hip-input"
-                    type="range"
-                    min={84}
-                    max={120}
-                    value={hipCm}
-                    onChange={(e) => setHipCm(Number(e.target.value))}
-                    className="w-full accent-[#181615]"
-                  />
-                  <div className="flex justify-between text-[11px] text-[#787067] font-mono-num mt-1">
-                    <span>84 cm</span>
-                    <span>120 cm</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Drape Preference */}
-              <div>
-                <span className="block text-xs font-medium text-[#181615] mb-2">
-                  Preferred Silhouette Drape
-                </span>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['Tailored', 'Signature', 'Relaxed'] as const).map(
-                    (pref) => (
+                  <span className="block text-xs font-medium text-[#2A1621] mb-2">
+                    Preferred Comfort Fit
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['Regular', 'Relaxed'] as const).map((pref) => (
                       <button
                         key={pref}
                         type="button"
                         onClick={() => setFitPref(pref)}
-                        className={`py-2 px-3 text-xs font-medium border transition-colors whitespace-nowrap shrink-0 ${
+                        className={`py-2.5 px-3 text-xs font-medium border rounded-lg transition-colors whitespace-nowrap shrink-0 ${
                           fitPref === pref
-                            ? 'bg-[#181615] text-[#FAF8F5] border-[#181615]'
-                            : 'bg-white text-[#4A443F] border-[#E5E0D8] hover:border-[#181615]'
+                            ? 'bg-[#A83264] text-white border-[#A83264]'
+                            : 'bg-white text-[#5B2C44] border-[#EDD5E1] hover:border-[#A83264]'
                         }`}
                       >
                         {pref} Fit
                       </button>
-                    )
-                  )}
+                    ))}
+                  </div>
                 </div>
               </div>
 
               {/* Recommendation Readout */}
-              <div className="p-5 bg-[#F4F0EA] border border-[#E5E0D8] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="p-5 bg-[#FCEEF4] border border-[#EDD5E1] rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
-                  <div className="text-xs uppercase tracking-wider text-[#6E675F]">
-                    Recommended Pattern Size · {sizeRecommendation.fitConfidence}
+                  <div className="text-xs uppercase tracking-wider text-[#A83264] font-semibold">
+                    Recommended Jaybor Size · {sizeRec.lengthNote}
                   </div>
-                  <p className="text-xs text-[#4A443F] leading-relaxed max-w-md">
-                    {sizeRecommendation.tailoringAdvice}
+                  <p className="text-xs text-[#5B2C44] leading-relaxed max-w-md">
+                    {sizeRec.fitAdvice}
                   </p>
                 </div>
                 <div className="shrink-0 text-left sm:text-right">
-                  <span className="block text-xs text-[#6E675F]">Size</span>
-                  <span className="font-display text-4xl font-bold text-[#181615]">
-                    {sizeRecommendation.recommendedSize}
+                  <span className="block text-xs text-[#6E4B5E]">
+                    Select Size
+                  </span>
+                  <span className="font-display text-3xl font-bold text-[#2A1621] font-mono-num">
+                    {sizeRec.recommendedSize}
                   </span>
                 </div>
               </div>
+
+              {/* Standard BD Kurti Measurement Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#EDD5E1] text-[#6E4B5E]">
+                      <th className="py-2 pr-4 font-medium">Jaybor Size</th>
+                      <th className="py-2 px-4 font-medium">Chest (Inches)</th>
+                      <th className="py-2 px-4 font-medium">Kurti Length</th>
+                      <th className="py-2 pl-4 font-medium">Pant Length</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#EDD5E1] font-mono-num text-[#2A1621]">
+                    <tr>
+                      <td className="py-2 pr-4 font-semibold">S (36")</td>
+                      <td className="py-2 px-4">36 in</td>
+                      <td className="py-2 px-4">41 in</td>
+                      <td className="py-2 pl-4">38 in</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 pr-4 font-semibold">M (38")</td>
+                      <td className="py-2 px-4">38 in</td>
+                      <td className="py-2 px-4">42 in</td>
+                      <td className="py-2 pl-4">38 in</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 pr-4 font-semibold">L (40")</td>
+                      <td className="py-2 px-4">40 in</td>
+                      <td className="py-2 px-4">42 in</td>
+                      <td className="py-2 pl-4">38.5 in</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 pr-4 font-semibold">XL (42")</td>
+                      <td className="py-2 px-4">42 in</td>
+                      <td className="py-2 px-4">43 in</td>
+                      <td className="py-2 pl-4">39 in</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 pr-4 font-semibold">XXL (44")</td>
+                      <td className="py-2 px-4">44 in</td>
+                      <td className="py-2 px-4">43 in</td>
+                      <td className="py-2 pl-4">39 in</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            {/* Right 5 Cols: Attributable Client Proof & Quantitative Craft Rigor */}
+            {/* Right 5 Cols: Customer Proof & Delivery Guarantee */}
             <div className="lg:col-span-5 space-y-6">
-              <div className="bg-[#FAF8F5] border border-[#E5E0D8] p-6 space-y-4">
-                <div className="text-xs text-[#6E675F] uppercase tracking-wider">
-                  Verified Client Fit & Provenance
+              <div className="bg-[#FFF9FB] border border-[#EDD5E1] rounded-xl p-6 space-y-4">
+                <div className="text-xs text-[#6E4B5E] uppercase tracking-wider">
+                  Loved by Customers Across Bangladesh
                 </div>
-                <div className="grid grid-cols-2 gap-4 py-3 border-y border-[#E5E0D8]">
+                <div className="grid grid-cols-2 gap-4 py-3 border-y border-[#EDD5E1]">
                   <div>
-                    <div className="text-2xl font-semibold text-[#181615] font-mono-num">
-                      97.4%
+                    <div className="text-2xl font-semibold text-[#A83264] font-mono-num">
+                      24–48 hrs
                     </div>
-                    <div className="text-xs text-[#57514A] mt-0.5">
-                      First-Try Fit Retention across 1,840 Complete Outfit Orders (Q1–Q3 2026)
+                    <div className="text-xs text-[#6E4B5E] mt-0.5">
+                      Home Delivery Inside Dhaka (৳70) & 2–4 Days Nationwide (৳130)
                     </div>
                   </div>
                   <div>
-                    <div className="text-2xl font-semibold text-[#181615] font-mono-num">
-                      48 hrs
+                    <div className="text-2xl font-semibold text-[#A83264] font-mono-num">
+                      100% COD
                     </div>
-                    <div className="text-xs text-[#57514A] mt-0.5">
-                      Insured Express Garment-Bag Dispatch from Milan & Paris
+                    <div className="text-xs text-[#6E4B5E] mt-0.5">
+                      No advance payment needed — inspect your Kurti on arrival
                     </div>
                   </div>
                 </div>
 
                 <blockquote className="space-y-3">
-                  <p className="text-xs text-[#181615] leading-relaxed italic">
-                    “Before ordering the Montaigne Espresso Wool Suit, I
-                    struggled to find jackets that fit a 68cm waist without
-                    pulling across the shoulders. Using the atelier pattern
-                    guide in Size S, all three pieces arrived ready for our
-                    annual partners summit in Geneva with zero alterations
-                    needed.”
+                  <p className="text-xs text-[#2A1621] leading-relaxed italic">
+                    “Ordered the Pookie Strawberry Blush Chikankari Kurti Set in
+                    Size M (38") for my university classes at North South
+                    University. The cotton is super soft for Dhaka's weather,
+                    the stitch quality is exact, and I paid Cash on Delivery the
+                    next afternoon!”
                   </p>
-                  <footer className="text-xs text-[#6E675F]">
-                    <strong className="text-[#181615] not-italic">
-                      Claire Beauchamp
+                  <footer className="text-xs text-[#6E4B5E]">
+                    <strong className="text-[#2A1621] not-italic">
+                      Farzana Afrin Ritu
                     </strong>{' '}
-                    · Managing Partner, Beauchamp & Associés Architecture, Lyon
+                    · Bashundhara R/A, Dhaka · Verified COD Buyer
                   </footer>
                 </blockquote>
               </div>
+            </div>
+          </div>
+        ) : (
+          /* Live Order Tracker with Ordered Outfit Image & Customer Details */
+          <div className="pt-8 space-y-6">
+            <div className="bg-[#FFF9FB] border border-[#EDD5E1] rounded-xl p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-display text-2xl font-semibold text-[#2A1621]">
+                    Track Your Cash on Delivery Order
+                  </h3>
+                  <p className="text-xs text-[#6E4B5E]">
+                    Search by your 11-digit Bangladesh mobile number (e.g.
+                    01712345678), Order ID (e.g. JB-2041), or Customer Name.
+                  </p>
+                </div>
+                <div className="relative w-full sm:w-72">
+                  <Search className="w-3.5 h-3.5 text-[#8F6B7E] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="search"
+                    aria-label="Search order by phone number or order ID"
+                    value={lookupQuery}
+                    onChange={(e) => setLookupQuery(e.target.value)}
+                    placeholder="Enter phone (017...) or JB-2041"
+                    className="w-full pl-8 pr-3 py-2 text-xs bg-white border border-[#EDD5E1] rounded-lg text-[#2A1621] focus:outline-none focus:border-[#A83264]"
+                  />
+                </div>
+              </div>
+
+              {matchedOrders.length === 0 ? (
+                <div className="py-10 text-center text-xs text-[#6E4B5E]">
+                  No Cash on Delivery orders found matching "{lookupQuery}".
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {matchedOrders.map((ord) => (
+                    <div
+                      key={ord.id}
+                      className="p-4 bg-white border border-[#EDD5E1] rounded-xl flex gap-4 items-start"
+                    >
+                      <div className="w-20 h-24 rounded-lg overflow-hidden bg-[#FCEEF4] border border-[#EDD5E1] shrink-0">
+                        <ResilientImage
+                          src={ord.primaryOutfitImage}
+                          alt={ord.primaryOutfitTitle}
+                          className="w-full h-full object-cover object-top"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="font-mono-num font-semibold text-[#A83264]">
+                            #{ord.orderNumber}
+                          </span>
+                          <span className="text-[11px] font-medium text-[#2A1621]">
+                            {ord.status}
+                          </span>
+                        </div>
+                        <div className="text-xs font-semibold text-[#2A1621] truncate">
+                          {ord.primaryOutfitTitle}
+                        </div>
+                        <div className="text-[11px] text-[#6E4B5E]">
+                          Customer: <strong className="text-[#2A1621]">{ord.customerName}</strong> ·{' '}
+                          <span className="font-mono-num">{ord.phone}</span>
+                        </div>
+                        <div className="text-[11px] text-[#6E4B5E] truncate">
+                          Address: {ord.address}, {ord.district} ({ord.deliveryZone})
+                        </div>
+                        <div className="pt-1 flex items-center justify-between text-xs border-t border-[#FCEEF4]">
+                          <span className="text-[#6E4B5E]">
+                            Cash on Delivery Total
+                          </span>
+                          <span className="font-mono-num font-semibold text-[#2A1621]">
+                            ৳{ord.totalBdt.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

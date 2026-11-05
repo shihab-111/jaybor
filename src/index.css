@@ -5,12 +5,20 @@
     --font-display: 'Cormorant Garamond', Georgia, serif;
     --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
+    --background: #FFF9FB;
+    --surface: #FCEEF4;
+    --surface-muted: #F7E2EC;
+    --border-soft: #EDD5E1;
+    --text-primary: #2A1621;
+    --text-muted: #6E4B5E;
+    --primary: #A83264;
+    --primary-hover: #8C2652;
   }
 
   body {
     font-family: var(--font-sans);
-    background-color: #FAF8F5;
-    color: #181615;
+    background-color: var(--background);
+    color: var(--text-primary);
   }
 
   h1, h2, .font-display {

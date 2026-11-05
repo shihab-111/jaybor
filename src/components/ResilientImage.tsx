@@ -19,16 +19,16 @@ export const ResilientImage: React.FC<ResilientImageProps> = ({
   if (hasError || !src) {
     return (
       <div
-        className={`flex flex-col items-center justify-center bg-gradient-to-br from-[#EFECE6] via-[#E5DFD5] to-[#D8CFC2] text-[#4A443F] p-6 text-center ${className}`}
+        className={`flex flex-col items-center justify-center bg-gradient-to-br from-[#FCEEF4] via-[#F7E2EC] to-[#EED2E2] text-[#5B2C44] p-6 text-center ${className}`}
         role="img"
         aria-label={alt}
       >
-        <Sparkles className="w-6 h-6 mb-2 opacity-60" />
+        <Sparkles className="w-6 h-6 mb-2 text-[#A83264] opacity-75" />
         <span className="font-display text-base italic tracking-wide">
           {fallbackLabel || alt}
         </span>
-        <span className="text-xs text-[#787067] mt-1">
-          Maison Valéria Archival Plate
+        <span className="text-xs text-[#6E4B5E] mt-1">
+          Jaybor Bangladesh Kurti Studio
         </span>
       </div>
     );

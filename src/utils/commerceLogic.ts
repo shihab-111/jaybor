@@ -1,17 +1,24 @@
 export type OutfitCategory =
-  | 'All Outfits'
-  | 'Tailored Workwear'
-  | 'Evening & Silk'
-  | 'Outerwear Sets'
-  | 'Resort Linen';
+  | 'All Kurtis'
+  | 'Daily Cotton Kurti'
+  | '2-Piece Kurti Set'
+  | 'Festive 3-Piece'
+  | 'Pookie Pastel Edition';
 
-export type GarmentSize = 'XS' | 'S' | 'M' | 'L' | 'XL';
+export type GarmentSize =
+  | 'S (36")'
+  | 'M (38")'
+  | 'L (40")'
+  | 'XL (42")'
+  | 'XXL (44")';
+
+export type DeliveryZone = 'Inside Dhaka' | 'Outside Dhaka';
 
 export interface OutfitPiece {
   id: string;
   name: string;
-  role: 'Top & Knit' | 'Bottom & Skirt' | 'Outerwear & Layer' | 'Dress';
-  price: number;
+  role: 'Kurti Top' | 'Matching Pant / Palazzo' | 'Dupatta / Orna';
+  priceBdt: number;
   fabric: string;
 }
 
@@ -19,77 +26,84 @@ export interface OutfitProduct {
   id: string;
   title: string;
   subtitle: string;
-  category: Exclude<OutfitCategory, 'All Outfits'>;
+  category: Exclude<OutfitCategory, 'All Kurtis'>;
   occasion: string;
-  completePrice: number;
-  individualTotal: number;
+  priceBdt: number;
+  originalPriceBdt: number;
   pieces: OutfitPiece[];
+  colorName: string;
+  colorHex: string;
   colorways: { name: string; hex: string }[];
   sizes: GarmentSize[];
   stockCount: number;
-  statusTag: 'In Stock' | 'Limited Run' | 'Atelier Pre-Order';
+  statusTag: 'In Stock' | 'Limited Edition' | 'New Arrival';
   imageUrl: string;
-  fabricOrigin: string;
+  fabric: string;
+  lengthInches: string;
   careInstructions: string;
-  modelFitNote: string;
   featured?: boolean;
+  isPublished?: boolean;
 }
 
 export interface CartItem {
   cartItemId: string;
   outfitId: string;
   title: string;
-  purchaseType: 'Complete Outfit Set' | 'Individual Piece' | 'Custom Capsule Set';
-  pieceName?: string;
+  category: string;
   size: GarmentSize;
   colorway: string;
-  unitPrice: number;
-  originalUnitPrice: number;
+  unitPriceBdt: number;
+  originalUnitPriceBdt: number;
   quantity: number;
   imageUrl: string;
 }
 
 export interface CustomerCheckoutInput {
   fullName: string;
-  email: string;
   phone: string;
+  district: string;
   address: string;
-  city: string;
-  postalCode: string;
-  paymentMethod: 'COD' | 'CARD';
+  deliveryZone: DeliveryZone;
   notes?: string;
 }
 
 export interface OrderRecord {
-  orderId: string;
-  createdAt: string;
-  customer: CustomerCheckoutInput;
-  items: CartItem[];
-  subtotal: number;
-  bundleSavings: number;
-  promoDiscount: number;
-  shippingFee: number;
-  total: number;
-  promoCodeApplied: string | null;
-  status: 'Confirmed — Preparing Shipment' | 'Dispatched via Courier' | 'Delivered';
-}
-
-export interface CapsulePieceOption {
   id: string;
-  name: string;
-  slot: 'top' | 'bottom' | 'outerwear';
-  price: number;
-  fabric: string;
-  color: string;
-  swatchHex: string;
+  orderNumber: string;
+  createdAt: string;
+  customerUid: string;
+  customerName: string;
+  phone: string;
+  district: string;
+  address: string;
+  deliveryZone: DeliveryZone;
+  paymentMethod: 'Cash on Delivery';
+  primaryOutfitTitle: string;
+  primaryOutfitImage: string;
+  itemSummaryList: string[];
+  items: CartItem[];
+  totalQuantity: number;
+  subtotalBdt: number;
+  savingsBdt: number;
+  discountBdt: number;
+  deliveryFeeBdt: number;
+  totalBdt: number;
+  promoCodeApplied: string | null;
+  status:
+    | 'Pending Call Verification'
+    | 'Confirmed — Packing Kurti'
+    | 'Sent to Steadfast Courier'
+    | 'Delivered';
 }
 
-export const FREE_SHIPPING_THRESHOLD = 450;
-export const STANDARD_SHIPPING_FEE = 25;
-export const COMPLETE_OUTFIT_BUNDLE_DISCOUNT_RATE = 0.12;
+export const FREE_DELIVERY_THRESHOLD_BDT = 2500;
+export const INSIDE_DHAKA_FEE_BDT = 70;
+export const OUTSIDE_DHAKA_FEE_BDT = 130;
+
+export const BD_PHONE_REGEX = /^(\+?88)?01[3-9][0-9]{8}$/;
 
 /**
- * Filter and sort outfit products by category, search query, and sort order.
+ * Filter and sort Jaybor Kurti outfits by category, search query, and sort order.
  */
 export function filterAndSortOutfits(
   outfits: OutfitProduct[],
@@ -101,7 +115,7 @@ export function filterAndSortOutfits(
 
   const filtered = outfits.filter((item) => {
     const matchesCategory =
-      category === 'All Outfits' || item.category === category;
+      category === 'All Kurtis' || item.category === category;
     if (!matchesCategory) return false;
 
     if (!normalizedQuery) return true;
@@ -111,7 +125,8 @@ export function filterAndSortOutfits(
       item.subtitle,
       item.category,
       item.occasion,
-      item.fabricOrigin,
+      item.fabric,
+      item.colorName,
       ...item.pieces.map((p) => `${p.name} ${p.fabric}`),
     ]
       .join(' ')
@@ -122,202 +137,177 @@ export function filterAndSortOutfits(
 
   return [...filtered].sort((a, b) => {
     if (sortBy === 'price-asc') {
-      return a.completePrice - b.completePrice;
+      return a.priceBdt - b.priceBdt;
     }
     if (sortBy === 'price-desc') {
-      return b.completePrice - a.completePrice;
+      return b.priceBdt - a.priceBdt;
     }
     if (sortBy === 'savings-desc') {
-      const savingsA = a.individualTotal - a.completePrice;
-      const savingsB = b.individualTotal - b.completePrice;
+      const savingsA = a.originalPriceBdt - a.priceBdt;
+      const savingsB = b.originalPriceBdt - b.priceBdt;
       return savingsB - savingsA;
     }
-    // featured default
     return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
   });
 }
 
 /**
- * Calculate cart totals including bundle savings, promo code discounts, and shipping.
+ * Calculate cart totals in BDT including Kurti set savings, promo code discounts, and Inside/Outside Dhaka courier fee.
  */
 export function calculateCartSummary(
   items: CartItem[],
-  promoCodeInput: string = ''
+  promoCodeInput: string = '',
+  deliveryZone: DeliveryZone = 'Inside Dhaka'
 ): {
   itemCount: number;
-  subtotal: number;
-  bundleSavings: number;
-  promoDiscount: number;
+  subtotalBdt: number;
+  bundleSavingsBdt: number;
+  promoDiscountBdt: number;
   promoCodeValid: boolean;
   promoMessage: string;
-  shippingFee: number;
-  amountToFreeShipping: number;
-  total: number;
+  deliveryFeeBdt: number;
+  amountToFreeDeliveryBdt: number;
+  totalBdt: number;
 } {
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
-  const subtotal = items.reduce(
-    (sum, item) => sum + item.unitPrice * item.quantity,
+  const subtotalBdt = items.reduce(
+    (sum, item) => sum + item.unitPriceBdt * item.quantity,
     0
   );
-  const originalSubtotal = items.reduce(
-    (sum, item) => sum + item.originalUnitPrice * item.quantity,
+  const originalSubtotalBdt = items.reduce(
+    (sum, item) => sum + item.originalUnitPriceBdt * item.quantity,
     0
   );
-  const bundleSavings = Math.max(0, originalSubtotal - subtotal);
+  const bundleSavingsBdt = Math.max(0, originalSubtotalBdt - subtotalBdt);
 
   const normalizedPromo = promoCodeInput.trim().toUpperCase();
-  let promoDiscount = 0;
+  let promoDiscountBdt = 0;
   let promoCodeValid = false;
   let promoMessage = '';
 
-  if (normalizedPromo === 'ATELIER15' && subtotal > 0) {
-    promoDiscount = Math.round(subtotal * 0.15);
+  if (normalizedPromo === 'JAYBOR10' && subtotalBdt > 0) {
+    promoDiscountBdt = Math.round(subtotalBdt * 0.1);
     promoCodeValid = true;
-    promoMessage = '15% Atelier Private Client reduction applied';
-  } else if (normalizedPromo === 'VALERIA50' && subtotal >= 400) {
-    promoDiscount = 50;
+    promoMessage = '10% Jaybor Pookie Club discount applied!';
+  } else if (normalizedPromo === 'POOKIE100' && subtotalBdt >= 1500) {
+    promoDiscountBdt = 100;
     promoCodeValid = true;
-    promoMessage = '$50 seasonal wardrobe credit applied';
+    promoMessage = '৳100 festive Kurti discount applied!';
   } else if (normalizedPromo.length > 0) {
-    promoMessage = 'Unrecognized code. Try ATELIER15 for 15% off.';
+    promoMessage = 'Invalid code. Try JAYBOR10 for 10% off.';
   }
 
-  const discountedSubtotal = Math.max(0, subtotal - promoDiscount);
-  const shippingFee =
-    discountedSubtotal === 0 || discountedSubtotal >= FREE_SHIPPING_THRESHOLD
-      ? 0
-      : STANDARD_SHIPPING_FEE;
-  const amountToFreeShipping =
-    discountedSubtotal >= FREE_SHIPPING_THRESHOLD
-      ? 0
-      : FREE_SHIPPING_THRESHOLD - discountedSubtotal;
+  const discountedSubtotal = Math.max(0, subtotalBdt - promoDiscountBdt);
+  const baseZoneFee =
+    deliveryZone === 'Inside Dhaka'
+      ? INSIDE_DHAKA_FEE_BDT
+      : OUTSIDE_DHAKA_FEE_BDT;
 
-  const total = discountedSubtotal + shippingFee;
+  const deliveryFeeBdt =
+    discountedSubtotal === 0 ||
+    discountedSubtotal >= FREE_DELIVERY_THRESHOLD_BDT
+      ? 0
+      : baseZoneFee;
+
+  const amountToFreeDeliveryBdt =
+    discountedSubtotal >= FREE_DELIVERY_THRESHOLD_BDT
+      ? 0
+      : FREE_DELIVERY_THRESHOLD_BDT - discountedSubtotal;
+
+  const totalBdt = discountedSubtotal + deliveryFeeBdt;
 
   return {
     itemCount,
-    subtotal,
-    bundleSavings,
-    promoDiscount,
+    subtotalBdt,
+    bundleSavingsBdt,
+    promoDiscountBdt,
     promoCodeValid,
     promoMessage,
-    shippingFee,
-    amountToFreeShipping,
-    total,
+    deliveryFeeBdt,
+    amountToFreeDeliveryBdt,
+    totalBdt,
   };
 }
 
 /**
- * Calculate custom 3-piece capsule outfit bundle pricing (12% savings when all 3 slots selected).
+ * Recommend Bangladeshi Kurti size based on bust/chest measurement in inches.
  */
-export function calculateCapsuleBundle(
-  top: CapsulePieceOption,
-  bottom: CapsulePieceOption,
-  outerwear: CapsulePieceOption
-): {
-  individualSum: number;
-  bundlePrice: number;
-  savingsAmount: number;
-  discountPercent: number;
-} {
-  const individualSum = top.price + bottom.price + outerwear.price;
-  const savingsAmount = Math.round(
-    individualSum * COMPLETE_OUTFIT_BUNDLE_DISCOUNT_RATE
-  );
-  const bundlePrice = individualSum - savingsAmount;
-
-  return {
-    individualSum,
-    bundlePrice,
-    savingsAmount,
-    discountPercent: 12,
-  };
-}
-
-/**
- * Recommend womenswear garment size based on bust, waist, and hip measurements in cm.
- */
-export function recommendGarmentSize(
-  bustCm: number,
-  waistCm: number,
-  hipCm: number,
-  fitPreference: 'Tailored' | 'Signature' | 'Relaxed' = 'Signature'
+export function recommendKurtiSize(
+  chestInches: number,
+  fitPreference: 'Regular' | 'Relaxed' = 'Regular'
 ): {
   recommendedSize: GarmentSize;
-  fitConfidence: string;
-  tailoringAdvice: string;
+  garmentChestInches: number;
+  lengthNote: string;
+  fitAdvice: string;
 } {
-  // Base size thresholds in cm:
-  // XS: bust <= 83, waist <= 66, hip <= 91
-  // S:  bust <= 88, waist <= 71, hip <= 96
-  // M:  bust <= 94, waist <= 77, hip <= 102
-  // L:  bust <= 101, waist <= 84, hip <= 109
-  // XL: above L
-  const scoreFromBust =
-    bustCm <= 83 ? 0 : bustCm <= 88 ? 1 : bustCm <= 94 ? 2 : bustCm <= 101 ? 3 : 4;
-  const scoreFromWaist =
-    waistCm <= 66 ? 0 : waistCm <= 71 ? 1 : waistCm <= 77 ? 2 : waistCm <= 84 ? 3 : 4;
-  const scoreFromHip =
-    hipCm <= 91 ? 0 : hipCm <= 96 ? 1 : hipCm <= 102 ? 2 : hipCm <= 109 ? 3 : 4;
+  let baseIndex =
+    chestInches <= 36
+      ? 0
+      : chestInches <= 38
+      ? 1
+      : chestInches <= 40
+      ? 2
+      : chestInches <= 42
+      ? 3
+      : 4;
 
-  let index = Math.max(scoreFromBust, scoreFromWaist, scoreFromHip);
-
-  if (fitPreference === 'Relaxed' && index < 4) {
-    index += 1;
-  } else if (fitPreference === 'Tailored' && index > 0 && scoreFromBust === scoreFromWaist) {
-    index = Math.max(0, index);
+  if (fitPreference === 'Relaxed' && baseIndex < 4) {
+    baseIndex += 1;
   }
 
-  const sizes: GarmentSize[] = ['XS', 'S', 'M', 'L', 'XL'];
-  const recommendedSize = sizes[index];
-
-  const spread = Math.max(scoreFromBust, scoreFromWaist, scoreFromHip) -
-    Math.min(scoreFromBust, scoreFromWaist, scoreFromHip);
-
-  const tailoringAdvice =
-    spread >= 2
-      ? 'Your proportions span two standard grading blocks; our complimentary waist dart adjustment is recommended on blazers and trousers.'
-      : 'Your measurements align evenly with our standard Italian pattern block with no alteration required.';
+  const sizes: GarmentSize[] = [
+    'S (36")',
+    'M (38")',
+    'L (40")',
+    'XL (42")',
+    'XXL (44")',
+  ];
+  const chestMap = [36, 38, 40, 42, 44];
+  const lengthMap = ['41 in', '42 in', '42 in', '43 in', '43 in'];
 
   return {
-    recommendedSize,
-    fitConfidence: spread === 0 ? 'Exact Atelier Match' : 'Balanced Drape Match',
-    tailoringAdvice,
+    recommendedSize: sizes[baseIndex],
+    garmentChestInches: chestMap[baseIndex],
+    lengthNote: `Kurti Length: ${lengthMap[baseIndex]} · Trouser Length: 38 in`,
+    fitAdvice:
+      fitPreference === 'Relaxed'
+        ? 'Sized with +2 inches airy comfort ease for humid Bangladesh weather.'
+        : 'True-to-measurement Bangladeshi boutique pattern block with side slits.',
   };
 }
 
 /**
- * Validate customer checkout form without substituting fallback values.
+ * Validate Bangladesh Cash on Delivery checkout form without substituting fallback values.
  */
-export function validateCheckoutInput(
-  input: CustomerCheckoutInput
-): { valid: boolean; errors: Partial<Record<keyof CustomerCheckoutInput, string>> } {
+export function validateCheckoutInput(input: CustomerCheckoutInput): {
+  valid: boolean;
+  errors: Partial<Record<keyof CustomerCheckoutInput, string>>;
+} {
   const errors: Partial<Record<keyof CustomerCheckoutInput, string>> = {};
 
   if (!input.fullName || input.fullName.trim().length < 2) {
-    errors.fullName = 'Please enter the recipient full name.';
+    errors.fullName = 'Please enter the customer full name.';
+  } else if (input.fullName.trim().length > 100) {
+    errors.fullName = 'Name must be under 100 characters.';
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!input.email || !emailRegex.test(input.email.trim())) {
-    errors.email = 'Please enter a valid email address for order receipt.';
+  const normalizedPhone = (input.phone || '').replace(/[\s-]/g, '');
+  if (!BD_PHONE_REGEX.test(normalizedPhone)) {
+    errors.phone =
+      'Please enter a valid 11-digit Bangladesh mobile number (e.g. 01712345678).';
   }
 
-  const cleanedPhone = (input.phone || '').replace(/[^\d+]/g, '');
-  if (cleanedPhone.length < 7) {
-    errors.phone = 'Please provide a valid contact phone number for courier verification.';
+  if (!input.district || input.district.trim().length < 2) {
+    errors.district =
+      'Please enter your District or Thana (e.g. Dhanmondi, Dhaka or Sylhet).';
   }
 
   if (!input.address || input.address.trim().length < 5) {
-    errors.address = 'Please enter a complete street delivery address.';
-  }
-
-  if (!input.city || input.city.trim().length < 2) {
-    errors.city = 'Please enter your city.';
-  }
-
-  if (!input.postalCode || input.postalCode.trim().length < 3) {
-    errors.postalCode = 'Please enter a valid postal or ZIP code.';
+    errors.address =
+      'Please enter your complete House, Road, and Area address for courier delivery.';
+  } else if (input.address.trim().length > 300) {
+    errors.address = 'Address must be under 300 characters.';
   }
 
   return {
@@ -327,35 +317,56 @@ export function validateCheckoutInput(
 }
 
 /**
- * Validate new female outfit listing form in the Boutique Seller Desk.
+ * Validate new Kurti outfit listing in the Jaybor Seller Desk.
  */
 export function validateNewOutfitInput(input: {
   title: string;
   subtitle: string;
-  completePrice: number;
-  topName: string;
-  topPrice: number;
-  bottomName: string;
-  bottomPrice: number;
+  priceBdt: number;
+  originalPriceBdt: number;
+  fabric: string;
+  colorName: string;
   stockCount: number;
+  imageUrl: string;
 }): { valid: boolean; error?: string } {
   if (!input.title || input.title.trim().length < 3) {
-    return { valid: false, error: 'Outfit title must be at least 3 characters.' };
+    return {
+      valid: false,
+      error: 'Kurti outfit title must be at least 3 characters.',
+    };
   }
   if (!input.subtitle || input.subtitle.trim().length < 5) {
-    return { valid: false, error: 'Please provide a concise styling subtitle.' };
+    return {
+      valid: false,
+      error: 'Please enter a short description of the Kurti pieces & embroidery.',
+    };
   }
-  if (!Number.isFinite(input.completePrice) || input.completePrice <= 0) {
-    return { valid: false, error: 'Complete outfit price must be greater than $0.' };
+  if (!Number.isFinite(input.priceBdt) || input.priceBdt <= 0) {
+    return {
+      valid: false,
+      error: 'Selling price in BDT (৳) must be greater than 0.',
+    };
   }
-  if (!input.topName.trim() || !input.bottomName.trim()) {
-    return { valid: false, error: 'Please name at least the two primary garments in the outfit.' };
+  if (
+    !Number.isFinite(input.originalPriceBdt) ||
+    input.originalPriceBdt < input.priceBdt
+  ) {
+    return {
+      valid: false,
+      error: 'Regular price must be greater than or equal to selling price.',
+    };
   }
-  if (input.topPrice <= 0 || input.bottomPrice <= 0) {
-    return { valid: false, error: 'Individual piece prices must be greater than $0.' };
+  if (!input.fabric || input.fabric.trim().length < 3) {
+    return { valid: false, error: 'Please specify the fabric (e.g. Cotton, Muslin).' };
+  }
+  if (!input.colorName || input.colorName.trim().length < 2) {
+    return { valid: false, error: 'Please specify the shade name.' };
   }
   if (!Number.isInteger(input.stockCount) || input.stockCount < 1) {
-    return { valid: false, error: 'Initial stock quantity must be at least 1.' };
+    return { valid: false, error: 'Stock count must be at least 1.' };
+  }
+  if (!input.imageUrl || input.imageUrl.trim().length < 5) {
+    return { valid: false, error: 'Please select or enter an outfit image.' };
   }
   return { valid: true };
 }

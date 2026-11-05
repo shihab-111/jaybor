@@ -3,173 +3,166 @@ import assert from 'node:assert/strict';
 import {
   filterAndSortOutfits,
   calculateCartSummary,
-  calculateCapsuleBundle,
-  recommendGarmentSize,
+  recommendKurtiSize,
   validateCheckoutInput,
   validateNewOutfitInput,
   type OutfitProduct,
   type CartItem,
 } from './commerceLogic';
 
-const sampleOutfits: OutfitProduct[] = [
+const sampleKurtis: OutfitProduct[] = [
   {
-    id: 'outfit-1',
-    title: 'Valéria Ivory Linen Tailored Ensemble',
-    subtitle: 'Double-breasted linen blazer, mulberry silk camisole & wide-leg trousers',
-    category: 'Tailored Workwear',
-    occasion: 'Architectural Daytime & Executive Meetings',
-    completePrice: 680,
-    individualTotal: 775,
+    id: 'kurti-1',
+    title: 'Meher Rose-Berry Embroidered Muslin 3-Piece Kurti',
+    subtitle: 'Handloom muslin embroidered kurti with straight palazzo pant and organza dupatta',
+    category: 'Festive 3-Piece',
+    occasion: 'Eid, Dawat & Festive Gatherings',
+    priceBdt: 2450,
+    originalPriceBdt: 2850,
     pieces: [
-      { id: 'p1', name: 'Double-Breasted Linen Blazer', role: 'Outerwear & Layer', price: 360, fabric: '100% Belgian Flax Linen' },
-      { id: 'p2', name: 'Bias-Cut Silk Camisole', role: 'Top & Knit', price: 155, fabric: '19-Momme Mulberry Silk' },
-      { id: 'p3', name: 'Pleated Wide-Leg Trousers', role: 'Bottom & Skirt', price: 260, fabric: '100% Belgian Flax Linen' },
+      { id: 'p1', name: 'Embroidered Muslin Kurti', role: 'Kurti Top', priceBdt: 1450, fabric: 'Dhakai Soft Muslin' },
+      { id: 'p2', name: 'Straight Silk-Cotton Trouser', role: 'Matching Pant / Palazzo', priceBdt: 550, fabric: 'Combed Cotton Silk' },
+      { id: 'p3', name: 'Scalloped Organza Dupatta', role: 'Dupatta / Orna', priceBdt: 450, fabric: 'Sheer Organza' },
     ],
-    colorways: [{ name: 'Limestone Ivory', hex: '#EFECE6' }],
-    sizes: ['XS', 'S', 'M', 'L', 'XL'],
-    stockCount: 8,
+    colorName: 'Rose Berry & Lilac',
+    colorHex: '#A83264',
+    colorways: [{ name: 'Rose Berry & Lilac', hex: '#A83264' }],
+    sizes: ['S (36")', 'M (38")', 'L (40")', 'XL (42")', 'XXL (44")'],
+    stockCount: 14,
     statusTag: 'In Stock',
     imageUrl: '/test1.jpg',
-    fabricOrigin: 'Woven in Biella & Como, Italy',
-    careInstructions: 'Specialist dry clean only',
-    modelFitNote: 'Model is 177cm and wears size S',
+    fabric: 'Soft Dhakai Muslin & Organza',
+    lengthInches: '42 inches',
+    careInstructions: 'Gentle hand wash in cold water',
     featured: true,
+    isPublished: true,
   },
   {
-    id: 'outfit-2',
-    title: 'Émeraude Bias-Cut Silk & Cashmere Evening Set',
-    subtitle: 'Emerald mulberry silk midi slip dress paired with a champagne cashmere wrap',
-    category: 'Evening & Silk',
-    occasion: 'Gallery Opening & Black-Tie Dinner',
-    completePrice: 790,
-    individualTotal: 900,
+    id: 'kurti-2',
+    title: 'Pookie Strawberry Blush Chikankari Cotton Kurti Set',
+    subtitle: 'Pastel pink chikankari embroidered cotton kurti with lace cuffs and white trouser',
+    category: 'Pookie Pastel Edition',
+    occasion: 'University, Office & Casual Outings',
+    priceBdt: 1390,
+    originalPriceBdt: 1650,
     pieces: [
-      { id: 'p4', name: 'Bias-Cut Silk Midi Dress', role: 'Dress', price: 540, fabric: '22-Momme Mulberry Silk' },
-      { id: 'p5', name: 'Draped Cashmere Evening Shawl', role: 'Outerwear & Layer', price: 360, fabric: '100% Inner Mongolian Cashmere' },
+      { id: 'p4', name: 'Chikankari Cotton Kurti', role: 'Kurti Top', priceBdt: 990, fabric: '100% Pure Voile Cotton' },
+      { id: 'p5', name: 'Off-White Straight Pant', role: 'Matching Pant / Palazzo', priceBdt: 400, fabric: 'Breathable Cambric Cotton' },
     ],
-    colorways: [{ name: 'Deep Emerald', hex: '#0F4C3A' }],
-    sizes: ['XS', 'S', 'M', 'L'],
-    stockCount: 4,
-    statusTag: 'Limited Run',
+    colorName: 'Strawberry Blush',
+    colorHex: '#F3B6C8',
+    colorways: [{ name: 'Strawberry Blush', hex: '#F3B6C8' }],
+    sizes: ['S (36")', 'M (38")', 'L (40")', 'XL (42")'],
+    stockCount: 19,
+    statusTag: 'New Arrival',
     imageUrl: '/test2.jpg',
-    fabricOrigin: 'Como Silk & Scottish Cashmere',
-    careInstructions: 'Hand wash cold or dry clean',
-    modelFitNote: 'Model is 175cm and wears size S',
+    fabric: '100% Pure Combed Cotton',
+    lengthInches: '41 inches',
+    careInstructions: 'Machine or hand wash cold',
     featured: false,
+    isPublished: true,
   },
 ];
 
-test('filterAndSortOutfits filters by category and search query and sorts accurately', () => {
-  const workwear = filterAndSortOutfits(sampleOutfits, 'Tailored Workwear', '', 'featured');
-  assert.equal(workwear.length, 1);
-  assert.equal(workwear[0].id, 'outfit-1');
+test('filterAndSortOutfits filters Kurti outfits by category and search query', () => {
+  const pookie = filterAndSortOutfits(sampleKurtis, 'Pookie Pastel Edition', '', 'featured');
+  assert.equal(pookie.length, 1);
+  assert.equal(pookie[0].id, 'kurti-2');
 
-  const searched = filterAndSortOutfits(sampleOutfits, 'All Outfits', 'cashmere', 'featured');
+  const searched = filterAndSortOutfits(sampleKurtis, 'All Kurtis', 'dupatta', 'featured');
   assert.equal(searched.length, 1);
-  assert.equal(searched[0].id, 'outfit-2');
+  assert.equal(searched[0].id, 'kurti-1');
 
-  const sortedDesc = filterAndSortOutfits(sampleOutfits, 'All Outfits', '', 'price-desc');
-  assert.equal(sortedDesc[0].id, 'outfit-2');
-  assert.equal(sortedDesc[1].id, 'outfit-1');
+  const sortedAsc = filterAndSortOutfits(sampleKurtis, 'All Kurtis', '', 'price-asc');
+  assert.equal(sortedAsc[0].id, 'kurti-2');
+  assert.equal(sortedAsc[1].id, 'kurti-1');
 });
 
-test('calculateCartSummary computes bundle savings, ATELIER15 promo, and free shipping threshold', () => {
+test('calculateCartSummary computes BDT subtotal, JAYBOR10 promo, and Inside/Outside Dhaka courier fees', () => {
   const items: CartItem[] = [
     {
       cartItemId: 'c1',
-      outfitId: 'outfit-1',
-      title: 'Valéria Ivory Linen Tailored Ensemble',
-      purchaseType: 'Complete Outfit Set',
-      size: 'M',
-      colorway: 'Limestone Ivory',
-      unitPrice: 680,
-      originalUnitPrice: 775,
+      outfitId: 'kurti-2',
+      title: 'Pookie Strawberry Blush Chikankari Cotton Kurti Set',
+      category: 'Pookie Pastel Edition',
+      size: 'M (38")',
+      colorway: 'Strawberry Blush',
+      unitPriceBdt: 1390,
+      originalUnitPriceBdt: 1650,
       quantity: 1,
-      imageUrl: '/test1.jpg',
+      imageUrl: '/test2.jpg',
     },
   ];
 
-  const summary = calculateCartSummary(items, 'atelier15');
-  assert.equal(summary.itemCount, 1);
-  assert.equal(summary.subtotal, 680);
-  assert.equal(summary.bundleSavings, 95);
-  assert.equal(summary.promoCodeValid, true);
-  assert.equal(summary.promoDiscount, 102); // 15% of 680
-  assert.equal(summary.shippingFee, 0); // 578 >= 450
-  assert.equal(summary.total, 578);
+  const insideDhaka = calculateCartSummary(items, 'jaybor10', 'Inside Dhaka');
+  assert.equal(insideDhaka.itemCount, 1);
+  assert.equal(insideDhaka.subtotalBdt, 1390);
+  assert.equal(insideDhaka.bundleSavingsBdt, 260);
+  assert.equal(insideDhaka.promoCodeValid, true);
+  assert.equal(insideDhaka.promoDiscountBdt, 139);
+  assert.equal(insideDhaka.deliveryFeeBdt, 70);
+  assert.equal(insideDhaka.totalBdt, 1390 - 139 + 70);
+
+  const outsideDhaka = calculateCartSummary(items, '', 'Outside Dhaka');
+  assert.equal(outsideDhaka.deliveryFeeBdt, 130);
+  assert.equal(outsideDhaka.totalBdt, 1390 + 130);
 });
 
-test('calculateCapsuleBundle applies 12% complete outfit discount on 3-piece combinations', () => {
-  const result = calculateCapsuleBundle(
-    { id: 't1', name: 'Silk Camisole', slot: 'top', price: 180, fabric: 'Silk', color: 'Ivory', swatchHex: '#fff' },
-    { id: 'b1', name: 'Wide-Leg Trousers', slot: 'bottom', price: 270, fabric: 'Wool', color: 'Espresso', swatchHex: '#332' },
-    { id: 'o1', name: 'Sculpted Blazer', slot: 'outerwear', price: 450, fabric: 'Wool', color: 'Espresso', swatchHex: '#332' }
-  );
+test('recommendKurtiSize maps chest measurement in inches to Bangladeshi Kurti size', () => {
+  const sizeM = recommendKurtiSize(38, 'Regular');
+  assert.equal(sizeM.recommendedSize, 'M (38")');
+  assert.equal(sizeM.garmentChestInches, 38);
 
-  assert.equal(result.individualSum, 900);
-  assert.equal(result.savingsAmount, 108);
-  assert.equal(result.bundlePrice, 792);
+  const sizeRelaxed = recommendKurtiSize(38, 'Relaxed');
+  assert.equal(sizeRelaxed.recommendedSize, 'L (40")');
 });
 
-test('recommendGarmentSize maps body measurements and fit preference to accurate size', () => {
-  const recS = recommendGarmentSize(86, 69, 94, 'Signature');
-  assert.equal(recS.recommendedSize, 'S');
-  assert.equal(recS.fitConfidence, 'Exact Atelier Match');
-
-  const recRelaxed = recommendGarmentSize(86, 69, 94, 'Relaxed');
-  assert.equal(recRelaxed.recommendedSize, 'M');
-});
-
-test('validateCheckoutInput rejects missing required fields and accepts valid customer details', () => {
+test('validateCheckoutInput enforces 11-digit Bangladesh mobile numbers and full address', () => {
   const invalid = validateCheckoutInput({
-    fullName: '',
-    email: 'not-an-email',
-    phone: '123',
-    address: '12',
-    city: '',
-    postalCode: '',
-    paymentMethod: 'COD',
+    fullName: 'A',
+    phone: '12345',
+    district: '',
+    address: 'abc',
+    deliveryZone: 'Inside Dhaka',
   });
   assert.equal(invalid.valid, false);
   assert.ok(invalid.errors.fullName);
-  assert.ok(invalid.errors.email);
   assert.ok(invalid.errors.phone);
+  assert.ok(invalid.errors.district);
+  assert.ok(invalid.errors.address);
 
   const valid = validateCheckoutInput({
-    fullName: 'Camille Laurent',
-    email: 'camille@atelier.fr',
-    phone: '+33 6 12 34 56 78',
-    address: '24 Rue du Faubourg Saint-Honoré',
-    city: 'Paris',
-    postalCode: '75008',
-    paymentMethod: 'COD',
+    fullName: 'Nusrat Jahan Mim',
+    phone: '01712345678',
+    district: 'Dhanmondi, Dhaka',
+    address: 'House 14, Road 7A, Dhanmondi R/A',
+    deliveryZone: 'Inside Dhaka',
   });
   assert.equal(valid.valid, true);
-  assert.equal(Object.keys(valid.errors).length, 0);
 });
 
-test('validateNewOutfitInput checks seller listing constraints', () => {
+test('validateNewOutfitInput checks Jaybor Seller Desk listing fields', () => {
   const invalid = validateNewOutfitInput({
-    title: 'A',
-    subtitle: 'Short',
-    completePrice: -10,
-    topName: '',
-    topPrice: 0,
-    bottomName: 'Skirt',
-    bottomPrice: 120,
+    title: 'ab',
+    subtitle: 'abc',
+    priceBdt: 0,
+    originalPriceBdt: 100,
+    fabric: '',
+    colorName: '',
     stockCount: 0,
+    imageUrl: '',
   });
   assert.equal(invalid.valid, false);
 
   const valid = validateNewOutfitInput({
-    title: 'Solstice Cashmere Knit Set',
-    subtitle: 'Ribbed cardigan and flared midi knit skirt',
-    completePrice: 540,
-    topName: 'Ribbed Cashmere Cardigan',
-    topPrice: 310,
-    bottomName: 'Flared Midi Knit Skirt',
-    bottomPrice: 290,
-    stockCount: 12,
+    title: 'Aarong-Style Lilac Cotton Kurti',
+    subtitle: 'Hand-embroidered neckline with matching trouser',
+    priceBdt: 1550,
+    originalPriceBdt: 1850,
+    fabric: '100% Combed Cotton',
+    colorName: 'Pastel Lilac',
+    stockCount: 15,
+    imageUrl: '/test.jpg',
   });
   assert.equal(valid.valid, true);
 });

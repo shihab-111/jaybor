@@ -1,0 +1,205 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Reusable Hardened Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'shihabahmmed700@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // 3. Entity Validation Blueprints
+    function isValidOutfit(data) {
+      return data.keys().hasAll([
+        'title', 'subtitle', 'category', 'priceBdt', 'originalPriceBdt',
+        'fabric', 'colorName', 'colorHex', 'imageUrl', 'stockCount',
+        'statusTag', 'sizes', 'isPublished', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'title', 'subtitle', 'category', 'priceBdt', 'originalPriceBdt',
+        'fabric', 'colorName', 'colorHex', 'imageUrl', 'stockCount',
+        'statusTag', 'sizes', 'isPublished', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.title is string && data.title.size() >= 3 && data.title.size() <= 120 &&
+      data.subtitle is string && data.subtitle.size() >= 5 && data.subtitle.size() <= 240 &&
+      data.category is string && data.category.size() <= 40 &&
+      (
+        data.category == 'Daily Cotton Kurti' ||
+        data.category == '2-Piece Kurti Set' ||
+        data.category == 'Festive 3-Piece' ||
+        data.category == 'Pookie Pastel Edition'
+      ) &&
+      data.priceBdt is number && data.priceBdt > 0 && data.priceBdt <= 500000 &&
+      data.originalPriceBdt is number && data.originalPriceBdt >= data.priceBdt && data.originalPriceBdt <= 500000 &&
+      data.fabric is string && data.fabric.size() >= 3 && data.fabric.size() <= 120 &&
+      data.colorName is string && data.colorName.size() >= 2 && data.colorName.size() <= 60 &&
+      data.colorHex is string && data.colorHex.size() >= 4 && data.colorHex.size() <= 9 &&
+      data.colorHex.matches('^#[0-9A-Fa-f]{3,8}$') &&
+      data.imageUrl is string && data.imageUrl.size() >= 5 && data.imageUrl.size() <= 500 &&
+      data.stockCount is int && data.stockCount >= 0 && data.stockCount <= 10000 &&
+      data.statusTag is string && data.statusTag.size() <= 30 &&
+      (
+        data.statusTag == 'In Stock' ||
+        data.statusTag == 'Limited Edition' ||
+        data.statusTag == 'New Arrival'
+      ) &&
+      data.sizes is list && data.sizes.size() >= 1 && data.sizes.size() <= 6 &&
+      data.sizes[0] is string && data.sizes[0].size() <= 20 &&
+      data.isPublished is bool &&
+      data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+      data.authorUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll([
+        'orderNumber', 'customerUid', 'customerName', 'phone', 'district',
+        'address', 'deliveryZone', 'paymentMethod', 'primaryOutfitTitle',
+        'primaryOutfitImage', 'itemSummaryList', 'totalQuantity',
+        'subtotalBdt', 'deliveryFeeBdt', 'discountBdt', 'totalBdt',
+        'status', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'orderNumber', 'customerUid', 'customerName', 'phone', 'district',
+        'address', 'deliveryZone', 'paymentMethod', 'primaryOutfitTitle',
+        'primaryOutfitImage', 'itemSummaryList', 'totalQuantity',
+        'subtotalBdt', 'deliveryFeeBdt', 'discountBdt', 'totalBdt',
+        'status', 'createdAt', 'updatedAt'
+      ]) &&
+      data.orderNumber is string && data.orderNumber.size() >= 4 && data.orderNumber.size() <= 32 &&
+      data.orderNumber.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.customerUid is string && data.customerUid.size() >= 1 && data.customerUid.size() <= 128 &&
+      data.customerUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.customerName is string && data.customerName.size() >= 2 && data.customerName.size() <= 100 &&
+      data.phone is string && data.phone.size() >= 11 && data.phone.size() <= 14 &&
+      data.phone.matches('^(\\+?88)?01[3-9][0-9]{8}$') &&
+      data.district is string && data.district.size() >= 2 && data.district.size() <= 80 &&
+      data.address is string && data.address.size() >= 5 && data.address.size() <= 300 &&
+      data.deliveryZone is string && data.deliveryZone.size() <= 20 &&
+      (data.deliveryZone == 'Inside Dhaka' || data.deliveryZone == 'Outside Dhaka') &&
+      data.paymentMethod is string && data.paymentMethod.size() <= 20 &&
+      data.paymentMethod == 'Cash on Delivery' &&
+      data.primaryOutfitTitle is string && data.primaryOutfitTitle.size() >= 3 && data.primaryOutfitTitle.size() <= 300 &&
+      data.primaryOutfitImage is string && data.primaryOutfitImage.size() >= 5 && data.primaryOutfitImage.size() <= 500 &&
+      data.itemSummaryList is list && data.itemSummaryList.size() >= 1 && data.itemSummaryList.size() <= 10 &&
+      data.itemSummaryList[0] is string && data.itemSummaryList[0].size() <= 240 &&
+      data.totalQuantity is int && data.totalQuantity >= 1 && data.totalQuantity <= 100 &&
+      data.subtotalBdt is number && data.subtotalBdt > 0 && data.subtotalBdt <= 5000000 &&
+      data.deliveryFeeBdt is number && data.deliveryFeeBdt >= 0 && data.deliveryFeeBdt <= 1000 &&
+      data.discountBdt is number && data.discountBdt >= 0 && data.discountBdt <= 1000000 &&
+      data.totalBdt is number && data.totalBdt > 0 && data.totalBdt <= 5000000 &&
+      data.status is string && data.status.size() <= 40 &&
+      (
+        data.status == 'Pending Call Verification' ||
+        data.status == 'Confirmed — Packing Kurti' ||
+        data.status == 'Sent to Steadfast Courier' ||
+        data.status == 'Delivered'
+      ) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // 4. Collection Rules: /outfits/{outfitId}
+    match /outfits/{outfitId} {
+      allow get: if isValidId(outfitId) && (resource.data.isPublished == true || isAdmin());
+      allow list: if resource.data.isPublished == true || isAdmin();
+
+      allow create: if isVerifiedUser() &&
+        isValidId(outfitId) &&
+        isValidOutfit(incoming()) &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isVerifiedUser() &&
+        isValidId(outfitId) &&
+        isValidOutfit(incoming()) &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'subtitle', 'category', 'priceBdt', 'originalPriceBdt',
+            'fabric', 'colorName', 'colorHex', 'imageUrl', 'stockCount',
+            'statusTag', 'sizes', 'isPublished', 'updatedAt'
+          ])
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(outfitId) && isAdmin();
+    }
+
+    // 5. Collection Rules: /orders/{orderId} (PII Isolated to Owner or Admin)
+    match /orders/{orderId} {
+      allow get: if isVerifiedUser() &&
+        isValidId(orderId) &&
+        (resource.data.customerUid == request.auth.uid || isAdmin());
+
+      allow list: if isVerifiedUser() &&
+        (resource.data.customerUid == request.auth.uid || isAdmin());
+
+      allow create: if isVerifiedUser() &&
+        isValidId(orderId) &&
+        isValidOrder(incoming()) &&
+        incoming().customerUid == request.auth.uid &&
+        incoming().status == 'Pending Call Verification' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(orderId) &&
+        isValidOrder(incoming()) &&
+        incoming().customerUid == existing().customerUid &&
+        incoming().orderNumber == existing().orderNumber &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          // Admin fulfillment status & address update
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'address', 'district', 'updatedAt'])) ||
+          // Customer address correction before terminal state
+          (
+            existing().customerUid == request.auth.uid &&
+            existing().status == 'Pending Call Verification' &&
+            incoming().status == existing().status &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['address', 'district', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(orderId) && isAdmin();
+    }
+
+    // 6. Collection Rules: /admins/{adminId}
+    match /admins/{adminId} {
+      allow get: if isVerifiedUser() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+  }
+}
