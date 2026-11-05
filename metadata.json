@@ -1,0 +1,6 @@
+{
+  "name": "Maison Valéria — Curated Womenswear & Complete Outfits",
+  "description": "Luxury female outfits boutique and business platform featuring curated multi-piece ensembles, bespoke capsule styling, size fit calculation, and order management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
