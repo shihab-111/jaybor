@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles } from 'lucide-react';
+import { resolveKurtiImageUrl } from '../data/outfitsData';
 
 interface ResilientImageProps {
   src: string;
@@ -14,9 +15,14 @@ export const ResilientImage: React.FC<ResilientImageProps> = ({
   className = '',
   fallbackLabel,
 }) => {
+  const resolvedSrc = resolveKurtiImageUrl(src);
   const [hasError, setHasError] = useState(false);
 
-  if (hasError || !src) {
+  useEffect(() => {
+    setHasError(false);
+  }, [resolvedSrc]);
+
+  if (hasError || !resolvedSrc) {
     return (
       <div
         className={`flex flex-col items-center justify-center bg-gradient-to-br from-[#FCEEF4] via-[#F7E2EC] to-[#EED2E2] text-[#5B2C44] p-6 text-center ${className}`}
@@ -36,8 +42,9 @@ export const ResilientImage: React.FC<ResilientImageProps> = ({
 
   return (
     <img
-      src={src}
+      src={resolvedSrc}
       alt={alt}
+      loading="lazy"
       referrerPolicy="no-referrer"
       onError={() => setHasError(true)}
       className={className}

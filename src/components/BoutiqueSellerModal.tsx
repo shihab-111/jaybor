@@ -82,9 +82,38 @@ export const BoutiqueSellerModal: React.FC<BoutiqueSellerModalProps> = ({
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setImageUrl(reader.result);
-      }
+      if (typeof reader.result !== 'string') return;
+      const rawDataUrl = reader.result;
+      const img = new Image();
+      img.onload = () => {
+        const maxDimension = 720;
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.78);
+          setImageUrl(compressedDataUrl);
+        } else {
+          setImageUrl(rawDataUrl);
+        }
+      };
+      img.onerror = () => {
+        setImageUrl(rawDataUrl);
+      };
+      img.src = rawDataUrl;
     };
     reader.readAsDataURL(file);
   };

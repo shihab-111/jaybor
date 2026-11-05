@@ -62,7 +62,7 @@ service cloud.firestore {
       data.colorName is string && data.colorName.size() >= 2 && data.colorName.size() <= 60 &&
       data.colorHex is string && data.colorHex.size() >= 4 && data.colorHex.size() <= 9 &&
       data.colorHex.matches('^#[0-9A-Fa-f]{3,8}$') &&
-      data.imageUrl is string && data.imageUrl.size() >= 5 && data.imageUrl.size() <= 500 &&
+      data.imageUrl is string && data.imageUrl.size() >= 5 && data.imageUrl.size() <= 350000 &&
       data.stockCount is int && data.stockCount >= 0 && data.stockCount <= 10000 &&
       data.statusTag is string && data.statusTag.size() <= 30 &&
       (
@@ -108,7 +108,7 @@ service cloud.firestore {
       data.paymentMethod is string && data.paymentMethod.size() <= 20 &&
       data.paymentMethod == 'Cash on Delivery' &&
       data.primaryOutfitTitle is string && data.primaryOutfitTitle.size() >= 3 && data.primaryOutfitTitle.size() <= 300 &&
-      data.primaryOutfitImage is string && data.primaryOutfitImage.size() >= 5 && data.primaryOutfitImage.size() <= 500 &&
+      data.primaryOutfitImage is string && data.primaryOutfitImage.size() >= 5 && data.primaryOutfitImage.size() <= 350000 &&
       data.itemSummaryList is list && data.itemSummaryList.size() >= 1 && data.itemSummaryList.size() <= 10 &&
       data.itemSummaryList[0] is string && data.itemSummaryList[0].size() <= 240 &&
       data.totalQuantity is int && data.totalQuantity >= 1 && data.totalQuantity <= 100 &&

@@ -1,28 +1,69 @@
 import type { OutfitProduct, OrderRecord } from '../utils/commerceLogic';
+import heroKurtiImg from '../assets/images/jaybor_hero_kurti_campaign_1793898464569.jpg';
+import blushCottonImg from '../assets/images/kurti_blush_cotton_daily_1793898467065.jpg';
+import berryMuslinImg from '../assets/images/kurti_berry_muslin_set_1793898468639.jpg';
+import lilacFestiveImg from '../assets/images/kurti_lilac_festive_3pc_1793898470269.jpg';
+import crimsonRoseImg from '../assets/images/kurti_crimson_rose_party_1793898470329.jpg';
 
-export const HERO_CAMPAIGN_IMAGE =
-  '/src/assets/images/jaybor_hero_kurti_campaign_1793898464569.jpg';
+export const HERO_CAMPAIGN_IMAGE = heroKurtiImg;
+
+const BUNDLED_IMAGE_MAP: Record<string, string> = {
+  'jaybor_hero_kurti_campaign_1793898464569.jpg': heroKurtiImg,
+  'kurti_blush_cotton_daily_1793898467065.jpg': blushCottonImg,
+  'kurti_berry_muslin_set_1793898468639.jpg': berryMuslinImg,
+  'kurti_lilac_festive_3pc_1793898470269.jpg': lilacFestiveImg,
+  'kurti_crimson_rose_party_1793898470329.jpg': crimsonRoseImg,
+};
+
+/**
+ * Resolves any stored image path (including legacy /src/assets/images/..., /images/...,
+ * or truncated 500-char base64 strings) to a cross-device compatible asset URL or Data URL.
+ */
+export function resolveKurtiImageUrl(rawUrl?: string | null): string {
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    return blushCottonImg;
+  }
+
+  const trimmed = rawUrl.trim();
+  if (!trimmed) {
+    return blushCottonImg;
+  }
+
+  // Check if the URL references one of the bundled studio Kurti photos
+  for (const [fileName, bundledUrl] of Object.entries(BUNDLED_IMAGE_MAP)) {
+    if (trimmed.includes(fileName)) {
+      return bundledUrl;
+    }
+  }
+
+  // Guard against any previously truncated 500-char base64 data URLs in Firestore/localStorage
+  if (trimmed.startsWith('data:image/') && trimmed.length <= 520) {
+    return blushCottonImg;
+  }
+
+  return trimmed;
+}
 
 export const KURTI_IMAGE_PLATES = [
   {
     label: 'Meher Rose-Berry Muslin 3-Piece Kurti',
-    url: '/src/assets/images/jaybor_hero_kurti_campaign_1793898464569.jpg',
+    url: '/images/jaybor_hero_kurti_campaign_1793898464569.jpg',
   },
   {
     label: 'Pookie Strawberry Blush Chikankari Kurti',
-    url: '/src/assets/images/kurti_blush_cotton_daily_1793898467065.jpg',
+    url: '/images/kurti_blush_cotton_daily_1793898467065.jpg',
   },
   {
     label: 'Mulberry Rose Handloom 2-Piece Co-ord Kurti',
-    url: '/src/assets/images/kurti_berry_muslin_set_1793898468639.jpg',
+    url: '/images/kurti_berry_muslin_set_1793898468639.jpg',
   },
   {
     label: 'Nilima Lilac-Plum Zari Festive 3-Piece Kurti',
-    url: '/src/assets/images/kurti_lilac_festive_3pc_1793898470269.jpg',
+    url: '/images/kurti_lilac_festive_3pc_1793898470269.jpg',
   },
   {
     label: 'Ananya Crimson-Rose Pearl A-Line Kurti',
-    url: '/src/assets/images/kurti_crimson_rose_party_1793898470329.jpg',
+    url: '/images/kurti_crimson_rose_party_1793898470329.jpg',
   },
 ];
 
@@ -61,8 +102,7 @@ export const INITIAL_OUTFITS: OutfitProduct[] = [
     sizes: ['S (36")', 'M (38")', 'L (40")', 'XL (42")', 'XXL (44")'],
     stockCount: 22,
     statusTag: 'New Arrival',
-    imageUrl:
-      '/src/assets/images/kurti_blush_cotton_daily_1793898467065.jpg',
+    imageUrl: '/images/kurti_blush_cotton_daily_1793898467065.jpg',
     fabric: '100% Pure Combed Cotton · Breathable Summer Weave',
     lengthInches: 'Kurti 42" · Trouser 38"',
     careInstructions: 'Cold hand wash or gentle machine cycle; iron on reverse.',
@@ -110,8 +150,7 @@ export const INITIAL_OUTFITS: OutfitProduct[] = [
     sizes: ['S (36")', 'M (38")', 'L (40")', 'XL (42")', 'XXL (44")'],
     stockCount: 14,
     statusTag: 'In Stock',
-    imageUrl:
-      '/src/assets/images/jaybor_hero_kurti_campaign_1793898464569.jpg',
+    imageUrl: '/images/jaybor_hero_kurti_campaign_1793898464569.jpg',
     fabric: 'Dhakai Soft Muslin with Cotton Inner & Organza Orna',
     lengthInches: 'Kurti 43" · Trouser 38" · Orna 90"',
     careInstructions: 'Mild shampoo hand wash cold; dry in shade.',
@@ -152,8 +191,7 @@ export const INITIAL_OUTFITS: OutfitProduct[] = [
     sizes: ['S (36")', 'M (38")', 'L (40")', 'XL (42")', 'XXL (44")'],
     stockCount: 18,
     statusTag: 'In Stock',
-    imageUrl:
-      '/src/assets/images/kurti_berry_muslin_set_1793898468639.jpg',
+    imageUrl: '/images/kurti_berry_muslin_set_1793898468639.jpg',
     fabric: 'Deshi Handloom Slub Cotton · Side Pocket Included',
     lengthInches: 'Kurti 37" · Palazzo 39"',
     careInstructions: 'Regular cold wash; colorfast guaranteed.',
@@ -201,8 +239,7 @@ export const INITIAL_OUTFITS: OutfitProduct[] = [
     sizes: ['S (36")', 'M (38")', 'L (40")', 'XL (42")', 'XXL (44")'],
     stockCount: 11,
     statusTag: 'Limited Edition',
-    imageUrl:
-      '/src/assets/images/kurti_lilac_festive_3pc_1793898470269.jpg',
+    imageUrl: '/images/kurti_lilac_festive_3pc_1793898470269.jpg',
     fabric: 'Joyshree Silk-Cotton & Cutwork Organza Dupatta',
     lengthInches: 'Kurti 43" · Trouser 38"',
     careInstructions: 'Gentle hand wash separately in cold water.',
@@ -243,8 +280,7 @@ export const INITIAL_OUTFITS: OutfitProduct[] = [
     sizes: ['S (36")', 'M (38")', 'L (40")', 'XL (42")', 'XXL (44")'],
     stockCount: 16,
     statusTag: 'In Stock',
-    imageUrl:
-      '/src/assets/images/kurti_crimson_rose_party_1793898470329.jpg',
+    imageUrl: '/images/kurti_crimson_rose_party_1793898470329.jpg',
     fabric: 'High-Drape Soft Rayon-Cotton with Hand-Stitched Pearls',
     lengthInches: 'Kurti 44" · Trouser 38"',
     careInstructions: 'Turn inside out and hand wash gently.',
@@ -278,8 +314,7 @@ export const INITIAL_OUTFITS: OutfitProduct[] = [
     sizes: ['S (36")', 'M (38")', 'L (40")', 'XL (42")', 'XXL (44")'],
     stockCount: 30,
     statusTag: 'In Stock',
-    imageUrl:
-      '/src/assets/images/kurti_blush_cotton_daily_1793898467065.jpg',
+    imageUrl: '/images/kurti_blush_cotton_daily_1793898467065.jpg',
     fabric: '100% Pure Export Cotton · Pre-Shrunk & Colorfast',
     lengthInches: 'Kurti 41"',
     careInstructions: 'Machine wash cold; dries quickly in shade.',
@@ -302,8 +337,7 @@ export const INITIAL_ORDERS: OrderRecord[] = [
     paymentMethod: 'Cash on Delivery',
     primaryOutfitTitle:
       'Pookie Strawberry Blush Chikankari Kurti & Pant Set (M (38") ×1)',
-    primaryOutfitImage:
-      '/src/assets/images/kurti_blush_cotton_daily_1793898467065.jpg',
+    primaryOutfitImage: '/images/kurti_blush_cotton_daily_1793898467065.jpg',
     itemSummaryList: [
       'Pookie Strawberry Blush Chikankari Kurti & Pant Set · Size M (38") · Qty 1 · ৳1,390',
     ],
@@ -318,8 +352,7 @@ export const INITIAL_ORDERS: OrderRecord[] = [
         unitPriceBdt: 1390,
         originalUnitPriceBdt: 1690,
         quantity: 1,
-        imageUrl:
-          '/src/assets/images/kurti_blush_cotton_daily_1793898467065.jpg',
+        imageUrl: '/images/kurti_blush_cotton_daily_1793898467065.jpg',
       },
     ],
     totalQuantity: 1,
@@ -344,8 +377,7 @@ export const INITIAL_ORDERS: OrderRecord[] = [
     paymentMethod: 'Cash on Delivery',
     primaryOutfitTitle:
       'Meher Rose-Berry Embroidered Muslin 3-Piece Set (L (40") ×1)',
-    primaryOutfitImage:
-      '/src/assets/images/jaybor_hero_kurti_campaign_1793898464569.jpg',
+    primaryOutfitImage: '/images/jaybor_hero_kurti_campaign_1793898464569.jpg',
     itemSummaryList: [
       'Meher Rose-Berry Embroidered Muslin 3-Piece Set · Size L (40") · Qty 1 · ৳2,450',
     ],
@@ -360,8 +392,7 @@ export const INITIAL_ORDERS: OrderRecord[] = [
         unitPriceBdt: 2450,
         originalUnitPriceBdt: 2890,
         quantity: 1,
-        imageUrl:
-          '/src/assets/images/jaybor_hero_kurti_campaign_1793898464569.jpg',
+        imageUrl: '/images/jaybor_hero_kurti_campaign_1793898464569.jpg',
       },
     ],
     totalQuantity: 1,

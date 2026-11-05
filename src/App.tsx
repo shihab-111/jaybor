@@ -40,6 +40,7 @@ import {
   HERO_CAMPAIGN_IMAGE,
   INITIAL_OUTFITS,
   INITIAL_ORDERS,
+  resolveKurtiImageUrl,
 } from './data/outfitsData';
 import { ResilientImage } from './components/ResilientImage';
 import { OutfitDetailModal } from './components/OutfitDetailModal';
@@ -55,8 +56,8 @@ const CATEGORIES: OutfitCategory[] = [
   'Festive 3-Piece',
 ];
 
-const LOCAL_ORDERS_STORAGE_KEY = 'jaybor_bd_orders_v1';
-const LOCAL_OUTFITS_STORAGE_KEY = 'jaybor_bd_outfits_v1';
+const LOCAL_ORDERS_STORAGE_KEY = 'jaybor_bd_orders_v2';
+const LOCAL_OUTFITS_STORAGE_KEY = 'jaybor_bd_outfits_v2';
 
 export default function App() {
   // Auth & Database State
@@ -180,7 +181,7 @@ export default function App() {
               ],
               stockCount: d.stockCount,
               statusTag: d.statusTag,
-              imageUrl: d.imageUrl,
+              imageUrl: resolveKurtiImageUrl(d.imageUrl),
               fabric: d.fabric,
               lengthInches: 'Kurti 42" · Trouser 38"',
               careInstructions: 'Cold hand wash recommended.',
@@ -245,7 +246,7 @@ export default function App() {
               deliveryZone: d.deliveryZone,
               paymentMethod: 'Cash on Delivery',
               primaryOutfitTitle: d.primaryOutfitTitle,
-              primaryOutfitImage: d.primaryOutfitImage,
+              primaryOutfitImage: resolveKurtiImageUrl(d.primaryOutfitImage),
               itemSummaryList: d.itemSummaryList || [],
               items: [],
               totalQuantity: d.totalQuantity,
@@ -416,7 +417,7 @@ export default function App() {
           deliveryZone: newOrder.deliveryZone,
           paymentMethod: 'Cash on Delivery',
           primaryOutfitTitle: newOrder.primaryOutfitTitle.slice(0, 300),
-          primaryOutfitImage: newOrder.primaryOutfitImage.slice(0, 500),
+          primaryOutfitImage: newOrder.primaryOutfitImage.slice(0, 350000),
           itemSummaryList: newOrder.itemSummaryList.slice(0, 10),
           totalQuantity: Math.min(100, Math.max(1, newOrder.totalQuantity)),
           subtotalBdt: newOrder.subtotalBdt,
@@ -461,7 +462,7 @@ export default function App() {
           fabric: newOutfit.fabric.slice(0, 120),
           colorName: newOutfit.colorName.slice(0, 60),
           colorHex: newOutfit.colorHex,
-          imageUrl: newOutfit.imageUrl.slice(0, 500),
+          imageUrl: newOutfit.imageUrl.slice(0, 350000),
           stockCount: newOutfit.stockCount,
           statusTag: newOutfit.statusTag,
           sizes: newOutfit.sizes.slice(0, 6),
